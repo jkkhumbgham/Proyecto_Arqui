@@ -96,8 +96,7 @@ docker compose ps
 ### 3.2 Levantar los servicios
 
 ```bash
-docker compose up -d user-service course-service assessment-service \
-                     collaboration-service analytics-service email-service web-ui
+docker compose up -d user-service course-service assessment-service collaboration-service analytics-service email-service web-ui
 ```
 
 Los servicios Java (WildFly) tardan ~60 segundos en arrancar. Puedes seguir el log de uno:
