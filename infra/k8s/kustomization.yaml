@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Cluster-wide resources first
+  - namespace.yaml
+  - secrets.yaml
+  - configmaps.yaml
+  # Infrastructure
+  - postgres/deployment.yaml
+  - redis/deployment.yaml
+  - rabbitmq/deployment.yaml
+  # Business services
+  - user-service/deployment.yaml
+  - course-service/deployment.yaml
+  - assessment-service/deployment.yaml
+  - collaboration-service/deployment.yaml
+  - analytics-service/deployment.yaml
+  - email-service/deployment.yaml
+  # Frontend
+  - web-ui/deployment.yaml
+  # Ingress last (depends on all services being defined)
+  - ingress.yaml

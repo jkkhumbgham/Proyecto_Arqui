@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets"
+      xmlns:c="jakarta.tags.core">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Dashboard</ui:define>
+<ui:define name="content">
+
+    <h2 class="page-title">Dashboard</h2>
+
+    <!-- ===== DIRECTOR / ADMIN: analytics summary ===== -->
+    <c:if test="#{sessionBean.hasRole('DIRECTOR', 'ADMIN')}">
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-value">#{dashboardBean.totalUsers}</div>
+                <div class="stat-label">Usuarios registrados</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">#{dashboardBean.totalEnrollments}</div>
+                <div class="stat-label">Inscripciones totales</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">#{dashboardBean.avgScore}%</div>
+                <div class="stat-label">Promedio evaluaciones</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-bottom:1rem;color:#1a3a6b;">Cursos más populares</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Curso</th>
+                        <th>Inscripciones</th>
+                        <th>Promedio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <ui:repeat value="#{dashboardBean.topCourses}" var="c">
+                        <tr>
+                            <td>#{c.title}</td>
+                            <td>#{c.enrollments}</td>
+                            <td>#{c.avgScore}%</td>
+                        </tr>
+                    </ui:repeat>
+                </tbody>
+            </table>
+        </div>
+    </c:if>
+
+    <!-- ===== STUDENT / INSTRUCTOR: my courses ===== -->
+    <c:if test="#{sessionBean.hasRole('STUDENT', 'INSTRUCTOR')}">
+        <h3 style="margin-bottom:1rem;color:#1a3a6b;">Mis cursos</h3>
+
+        <c:if test="#{empty dashboardBean.myCourses}">
+            <div class="card" style="text-align:center;color:#888;">
+                <p>No tienes cursos inscritos.</p>
+                <h:link value="Explorar catálogo" outcome="/views/courses"
+                        styleClass="btn btn-primary" style="margin-top:.75rem;display:inline-block;"/>
+            </div>
+        </c:if>
+
+        <div class="card-grid">
+            <ui:repeat value="#{dashboardBean.myCourses}" var="course">
+                <div class="card">
+                    <strong>#{course.title}</strong>
+                    <div style="margin:.6rem 0 .3rem;font-size:.85rem;color:#666;">
+                        Progreso: #{course.progress}%
+                    </div>
+                    <div class="progress-bar-wrap">
+                        <div class="progress-bar-fill" style="width:#{course.progress}%;"/>
+                    </div>
+                    <div style="margin-top:.6rem;">
+                        <span class="badge #{course.status == 'COMPLETED' ? 'badge-green' : 'badge-blue'}">
+                            #{course.status}
+                        </span>
+                    </div>
+                    <div style="margin-top:.75rem;">
+                        <h:link value="Ver evaluaciones" outcome="/views/assessments"
+                                styleClass="btn btn-secondary btn-sm"/>
+                    </div>
+                </div>
+            </ui:repeat>
+        </div>
+    </c:if>
+
+</ui:define>
+</ui:composition>
+</html>

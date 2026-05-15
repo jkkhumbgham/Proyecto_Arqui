@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets"
+      xmlns:c="jakarta.tags.core">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Cursos</ui:define>
+<ui:define name="content">
+
+    <h2 class="page-title">Cursos</h2>
+
+    <!-- Create-course form (INSTRUCTOR / ADMIN only) -->
+    <c:if test="#{sessionBean.hasRole('INSTRUCTOR', 'ADMIN')}">
+        <div class="card" style="margin-bottom:1.5rem;">
+            <h3 style="margin-bottom:1rem;color:#1a3a6b;">Nuevo curso</h3>
+            <h:form id="newCourseForm">
+                <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:1rem;align-items:end;">
+                    <div class="form-group" style="margin:0;">
+                        <label>Título</label>
+                        <h:inputText value="#{courseBean.newTitle}" required="true"
+                                     requiredMessage="El título es obligatorio."/>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Descripción</label>
+                        <h:inputText value="#{courseBean.newDescription}"/>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Máx. estudiantes</label>
+                        <h:inputText value="#{courseBean.newMaxStudents}"/>
+                    </div>
+                </div>
+                <h:commandButton value="Crear curso" action="#{courseBean.createCourse}"
+                                 styleClass="btn btn-primary" style="margin-top:.75rem;"/>
+                <h:messages for="newCourseForm" styleClass="ui-messages-error" style="margin-top:.5rem;display:block;"/>
+            </h:form>
+        </div>
+    </c:if>
+
+    <!-- Course list -->
+    <div class="card-grid">
+        <ui:repeat value="#{courseBean.courses}" var="course">
+            <div class="card">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem;">
+                    <strong>#{course.title}</strong>
+                    <span class="badge
+                        #{course.status == 'PUBLISHED' ? 'badge-green' :
+                          course.status == 'DRAFT'     ? 'badge-yellow' : 'badge-red'}">
+                        #{course.status}
+                    </span>
+                </div>
+                <p style="font-size:.875rem;color:#666;margin-bottom:.75rem;">#{course.description}</p>
+                <p style="font-size:.8rem;color:#999;">Máx: #{course.maxStudents} estudiantes</p>
+
+                <div style="margin-top:.85rem;display:flex;gap:.5rem;">
+                    <c:if test="#{sessionBean.hasRole('STUDENT')}">
+                        <h:form>
+                            <h:inputHidden value="#{courseBean.selectedCourseId}" id="cid"/>
+                            <h:commandButton value="Inscribirse" action="#{courseBean.enroll}"
+                                             styleClass="btn btn-primary btn-sm"
+                                             rendered="#{course.status == 'PUBLISHED'}">
+                                <f:setPropertyActionListener target="#{courseBean.selectedCourseId}"
+                                                             value="#{course.id}"/>
+                            </h:commandButton>
+                        </h:form>
+                    </c:if>
+                    <h:link value="Ver detalle" outcome="/views/course-detail" styleClass="btn btn-secondary btn-sm">
+                        <f:param name="courseId" value="#{course.id}"/>
+                    </h:link>
+                </div>
+            </div>
+        </ui:repeat>
+    </div>
+
+    <c:if test="#{empty courseBean.courses}">
+        <div class="card" style="text-align:center;color:#888;">No hay cursos disponibles.</div>
+    </c:if>
+
+</ui:define>
+</ui:composition>
+</html>

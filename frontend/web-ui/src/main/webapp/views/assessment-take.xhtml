@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets"
+      xmlns:c="jakarta.tags.core">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Respondiendo evaluación</ui:define>
+<ui:define name="content">
+    <f:metadata>
+        <f:viewParam name="submissionId" value="#{assessmentBean.submissionId}"/>
+        <f:viewParam name="assessmentId" value="#{assessmentBean.selectedAssessmentId}"/>
+        <f:viewAction action="#{assessmentBean.loadDetail}"/>
+    </f:metadata>
+
+    <h2 class="page-title">#{assessmentBean.assessmentDetail['title']}</h2>
+    <p style="color:#555;margin-bottom:1.5rem;">#{assessmentBean.assessmentDetail['description']}</p>
+
+    <h:form id="answerForm">
+        <h:inputHidden value="#{assessmentBean.submissionId}"/>
+
+        <ui:repeat value="#{assessmentBean.questions}" var="q" varStatus="s">
+            <div class="question-card">
+                <div class="question-text">#{s.index + 1}. #{q.text}
+                    <span style="float:right;font-size:.8rem;color:#888;">(#{q.points} pts)</span>
+                </div>
+
+                <!-- SINGLE_CHOICE -->
+                <c:if test="#{q.type == 'SINGLE_CHOICE'}">
+                    <ui:repeat value="#{q.options}" var="opt">
+                        <label class="option-label">
+                            <h:selectOneRadio value="#{assessmentBean.selectedAnswers[q.id]}"
+                                              layout="pageDirection">
+                                <f:selectItem itemValue="#{opt.id}" itemLabel="#{opt.text}"/>
+                            </h:selectOneRadio>
+                        </label>
+                    </ui:repeat>
+                </c:if>
+
+                <!-- MULTIPLE_CHOICE -->
+                <c:if test="#{q.type == 'MULTIPLE_CHOICE'}">
+                    <ui:repeat value="#{q.options}" var="opt">
+                        <label class="option-label">
+                            <h:selectManyCheckbox value="#{assessmentBean.selectedAnswers[q.id]}"
+                                                  layout="pageDirection">
+                                <f:selectItem itemValue="#{opt.id}" itemLabel="#{opt.text}"/>
+                            </h:selectManyCheckbox>
+                        </label>
+                    </ui:repeat>
+                </c:if>
+
+                <!-- TRUE_FALSE -->
+                <c:if test="#{q.type == 'TRUE_FALSE'}">
+                    <label class="option-label">
+                        <h:selectOneRadio value="#{assessmentBean.selectedBooleans[q.id]}"
+                                          layout="pageDirection">
+                            <f:selectItem itemValue="true"  itemLabel="Verdadero"/>
+                            <f:selectItem itemValue="false" itemLabel="Falso"/>
+                        </h:selectOneRadio>
+                    </label>
+                </c:if>
+
+                <!-- SHORT_ANSWER -->
+                <c:if test="#{q.type == 'SHORT_ANSWER'}">
+                    <div class="form-group" style="margin-top:.5rem;">
+                        <h:inputTextarea value="#{assessmentBean.selectedAnswers[q.id]}"
+                                         rows="3" style="width:100%;"/>
+                    </div>
+                </c:if>
+            </div>
+        </ui:repeat>
+
+        <div style="text-align:right;margin-top:1rem;">
+            <h:commandButton value="Enviar respuestas" action="#{assessmentBean.submitAnswers}"
+                             styleClass="btn btn-primary"
+                             onclick="return confirm('¿Seguro que quieres enviar? No podrás modificar las respuestas.')"/>
+        </div>
+    </h:form>
+
+</ui:define>
+</ui:composition>
+</html>

@@ -1,0 +1,23 @@
+# Secretos locales — NUNCA subir
+.env
+jwt_private.pem
+jwt_public.pem
+
+target/
+*.class
+*.jar
+*.war
+*.ear
+.idea/
+*.iml
+.vscode/
+.DS_Store
+*.log
+*.env
+.env.local
+node_modules/
+bin/
+obj/
+*.user
+*.suo
+.vs/

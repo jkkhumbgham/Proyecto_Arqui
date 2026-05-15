@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets"
+      xmlns:c="jakarta.tags.core">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Resultado</ui:define>
+<ui:define name="content">
+
+    <h2 class="page-title">Resultado de la evaluación</h2>
+
+    <div class="card result-box">
+        <div class="result-score">
+            #{assessmentBean.submissionResult['score']}%
+        </div>
+        <p style="margin-top:.5rem;font-size:1.1rem;color:#555;">
+            <c:if test="#{assessmentBean.submissionResult['passed']}">
+                <span style="color:#27ae60;font-weight:600;">¡Aprobado!</span>
+            </c:if>
+            <c:if test="#{not assessmentBean.submissionResult['passed']}">
+                <span style="color:#c0392b;font-weight:600;">No aprobado</span>
+            </c:if>
+        </p>
+
+        <c:if test="#{not empty assessmentBean.adaptiveRecommendation}">
+            <div class="adaptive-tip">
+                <strong>Recomendación del sistema adaptativo:</strong>
+                <p style="margin-top:.4rem;">#{assessmentBean.adaptiveRecommendation}</p>
+            </div>
+        </c:if>
+
+        <div style="margin-top:1.5rem;display:flex;gap:1rem;justify-content:center;">
+            <h:link value="Ver más evaluaciones" outcome="/views/assessments" styleClass="btn btn-primary"/>
+            <h:link value="Ir al Dashboard"      outcome="/views/dashboard"   styleClass="btn btn-secondary"/>
+        </div>
+    </div>
+
+</ui:define>
+</ui:composition>
+</html>

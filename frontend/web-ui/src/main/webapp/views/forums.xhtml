@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets"
+      xmlns:c="jakarta.tags.core">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Foros</ui:define>
+<ui:define name="content">
+
+    <h2 class="page-title">Foros de discusión</h2>
+
+    <!-- Create forum (INSTRUCTOR / ADMIN) -->
+    <c:if test="#{sessionBean.hasRole('INSTRUCTOR', 'ADMIN')}">
+        <div class="card" style="margin-bottom:1.5rem;">
+            <h3 style="margin-bottom:.85rem;color:#1a3a6b;">Crear foro</h3>
+            <h:form>
+                <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:1rem;align-items:end;">
+                    <div class="form-group" style="margin:0;">
+                        <label>Título del foro</label>
+                        <h:inputText value="#{forumBean.newForumTitle}" required="true"/>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>ID del curso</label>
+                        <h:inputText value="#{forumBean.newForumCourseId}" required="true"/>
+                    </div>
+                    <h:commandButton value="Crear" action="#{forumBean.createForum}"
+                                     styleClass="btn btn-primary"/>
+                </div>
+            </h:form>
+        </div>
+    </c:if>
+
+    <!-- Two-column layout: forums list + threads -->
+    <div style="display:grid;grid-template-columns:300px 1fr;gap:1.5rem;align-items:start;">
+
+        <!-- Forum list -->
+        <div class="card" style="padding:1rem;">
+            <h3 style="margin-bottom:.75rem;font-size:1rem;color:#1a3a6b;">Foros disponibles</h3>
+            <h:panelGroup rendered="#{empty forumBean.forums}">
+                <p style="color:#888;font-size:.875rem;">No hay foros disponibles.</p>
+            </h:panelGroup>
+            <ui:repeat value="#{forumBean.forums}" var="forum">
+                <h:form>
+                    <h:commandButton value="#{forum.title}" action="#{forumBean.loadThreads}"
+                                     styleClass="btn btn-secondary btn-sm"
+                                     style="width:100%;text-align:left;margin-bottom:.4rem;">
+                        <f:setPropertyActionListener target="#{forumBean.selectedForumId}"
+                                                     value="#{forum.id}"/>
+                    </h:commandButton>
+                </h:form>
+            </ui:repeat>
+        </div>
+
+        <!-- Threads panel -->
+        <div>
+            <h:panelGroup rendered="#{not empty forumBean.threads}">
+                <div class="card" style="margin-bottom:1rem;">
+                    <h3 style="margin-bottom:.75rem;color:#1a3a6b;">Hilos</h3>
+                    <!-- New thread form -->
+                    <h:form>
+                        <div style="display:flex;gap:.75rem;margin-bottom:1rem;">
+                            <h:inputText value="#{forumBean.newThreadTitle}"
+                                         placeholder="Nuevo hilo..." style="flex:1;"/>
+                            <h:commandButton value="Crear hilo" action="#{forumBean.createThread}"
+                                             styleClass="btn btn-primary btn-sm"/>
+                        </div>
+                    </h:form>
+
+                    <ui:repeat value="#{forumBean.threads}" var="thread">
+                        <div class="thread-item" style="display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <strong>#{thread.title}</strong>
+                                <span style="font-size:.8rem;color:#888;margin-left:.5rem;">
+                                    #{thread.postCount} respuesta(s)
+                                </span>
+                                <div style="font-size:.8rem;color:#aaa;">por #{thread.author}</div>
+                            </div>
+                            <h:form>
+                                <h:commandButton value="Ver" action="#{forumBean.loadPosts}"
+                                                 styleClass="btn btn-secondary btn-sm">
+                                    <f:setPropertyActionListener target="#{forumBean.selectedThreadId}"
+                                                                 value="#{thread.id}"/>
+                                </h:commandButton>
+                            </h:form>
+                        </div>
+                    </ui:repeat>
+                </div>
+            </h:panelGroup>
+
+            <!-- Posts panel -->
+            <h:panelGroup rendered="#{not empty forumBean.posts}">
+                <div class="card">
+                    <h3 style="margin-bottom:.75rem;color:#1a3a6b;">Respuestas</h3>
+                    <ui:repeat value="#{forumBean.posts}" var="post">
+                        <div class="post-item">
+                            <div class="post-author">#{post.author} · #{post.createdAt}</div>
+                            <p>#{post.content}</p>
+                        </div>
+                    </ui:repeat>
+                    <!-- Reply form -->
+                    <h:form style="margin-top:1rem;">
+                        <div class="form-group">
+                            <h:inputTextarea value="#{forumBean.newPostContent}"
+                                             rows="3" placeholder="Escribe tu respuesta..."
+                                             style="width:100%;"/>
+                        </div>
+                        <h:commandButton value="Publicar" action="#{forumBean.replyThread}"
+                                         styleClass="btn btn-primary btn-sm"/>
+                    </h:form>
+                </div>
+            </h:panelGroup>
+
+            <h:panelGroup rendered="#{empty forumBean.threads and not empty forumBean.forums}">
+                <div class="card" style="text-align:center;color:#888;">
+                    Selecciona un foro para ver sus hilos.
+                </div>
+            </h:panelGroup>
+        </div>
+    </div>
+
+</ui:define>
+</ui:composition>
+</html>

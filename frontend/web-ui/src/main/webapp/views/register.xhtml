@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/layout.xhtml">
+<ui:define name="pageTitle">Registro</ui:define>
+<ui:define name="body">
+    <div class="login-page">
+        <div class="login-box" style="width:420px;">
+            <div class="logo">
+                <h1>Crear cuenta</h1>
+                <p>Pontificia Universidad Javeriana · 2026</p>
+            </div>
+
+            <h:messages globalOnly="true"
+                        errorClass="ui-messages-error"
+                        infoClass="ui-messages-info"
+                        style="margin-bottom:1rem;display:block;"/>
+
+            <h:form id="registerForm">
+                <div class="form-group">
+                    <label for="email">Correo electrónico</label>
+                    <h:inputText id="email" value="#{loginBean.email}" required="true"
+                                 requiredMessage="El correo es obligatorio.">
+                        <f:validateRegex pattern="[^@]+@[^@]+\.[^@]+" validatorMessage="Correo inválido"/>
+                    </h:inputText>
+                    <h:message for="email" style="color:#c0392b;font-size:.8rem;"/>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <h:inputSecret id="password" value="#{loginBean.password}" required="true"
+                                   requiredMessage="La contraseña es obligatoria."
+                                   validatorMessage="Mínimo 8 caracteres">
+                        <f:validateLength minimum="8"/>
+                    </h:inputSecret>
+                    <h:message for="password" style="color:#c0392b;font-size:.8rem;"/>
+                </div>
+
+                <div class="form-group" style="display:flex;align-items:flex-start;gap:.6rem;">
+                    <h:selectBooleanCheckbox id="consent" value="#{loginBean.consentGiven}" required="true"
+                                             requiredMessage="Debes aceptar el tratamiento de datos."/>
+                    <label for="consent" style="font-size:.85rem;line-height:1.4;">
+                        Acepto el tratamiento de mis datos personales según la
+                        <strong>Ley 1581 de 2012</strong> y la política de privacidad de la plataforma.
+                    </label>
+                </div>
+                <h:message for="consent" style="color:#c0392b;font-size:.8rem;"/>
+
+                <h:commandButton value="Crear cuenta" action="#{loginBean.register}"
+                                 styleClass="btn btn-primary" style="width:100%;margin-top:.5rem;"/>
+            </h:form>
+
+            <p style="text-align:center;margin-top:1.25rem;font-size:.875rem;">
+                ¿Ya tienes cuenta? <h:link value="Iniciar sesión" outcome="/views/login"/>
+            </p>
+        </div>
+    </div>
+</ui:define>
+</ui:composition>
+</html>

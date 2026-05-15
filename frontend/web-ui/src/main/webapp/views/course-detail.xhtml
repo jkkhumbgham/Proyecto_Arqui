@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Detalle del curso</ui:define>
+<ui:define name="content">
+    <f:metadata>
+        <f:viewParam name="courseId" value="#{courseBean.selectedCourseId}"/>
+        <f:viewAction action="#{courseBean.loadDetail}"/>
+    </f:metadata>
+
+    <h:link value="← Volver a cursos" outcome="/views/courses" styleClass="btn btn-secondary btn-sm"
+            style="margin-bottom:1rem;display:inline-block;"/>
+
+    <h2 class="page-title">
+        #{courseBean.courseDetail['title']}
+        <span class="badge badge-green" style="font-size:.7rem;vertical-align:middle;">
+            #{courseBean.courseDetail['status']}
+        </span>
+    </h2>
+
+    <p style="color:#555;margin-bottom:1.5rem;">#{courseBean.courseDetail['description']}</p>
+
+    <div class="card">
+        <h3 style="margin-bottom:1rem;color:#1a3a6b;">Módulos</h3>
+        <ui:repeat value="#{courseBean.modules}" var="mod">
+            <div style="display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid #eee;">
+                <span style="background:#1a3a6b;color:#fff;border-radius:50%;width:28px;height:28px;
+                             display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;">
+                    #{mod.order}
+                </span>
+                <span>#{mod.title}</span>
+            </div>
+        </ui:repeat>
+        <h:panelGroup rendered="#{empty courseBean.modules}">
+            <p style="color:#888;padding:.5rem 0;">Este curso aún no tiene módulos.</p>
+        </h:panelGroup>
+    </div>
+
+</ui:define>
+</ui:composition>
+</html>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<persistence xmlns="https://jakarta.ee/xml/ns/persistence" version="3.1">
+    <persistence-unit name="AssessmentServicePU" transaction-type="JTA">
+        <jta-data-source>java:jboss/datasources/AssessmentServiceDS</jta-data-source>
+        <class>com.puj.assessments.entity.Assessment</class>
+        <class>com.puj.assessments.entity.Question</class>
+        <class>com.puj.assessments.entity.AnswerOption</class>
+        <class>com.puj.assessments.entity.Submission</class>
+        <class>com.puj.assessments.entity.AdaptiveRule</class>
+        <exclude-unlisted-classes>true</exclude-unlisted-classes>
+        <properties>
+            <property name="jakarta.persistence.schema-generation.database.action" value="update"/>
+            <property name="hibernate.dialect"        value="org.hibernate.dialect.PostgreSQLDialect"/>
+            <property name="hibernate.default_schema" value="assessments"/>
+            <property name="hibernate.show_sql"       value="false"/>
+        </properties>
+    </persistence-unit>
+</persistence>

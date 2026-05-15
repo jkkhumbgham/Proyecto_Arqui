@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: email-service
+  namespace: puj-platform
+  labels:
+    app: email-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: email-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: email-service
+    spec:
+      containers:
+        - name: email-service
+          image: REGISTRY/puj/email-service:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: RABBITMQ_HOST
+              value: "rabbitmq"
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: RABBITMQ_USER }
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: RABBITMQ_PASSWORD }
+            - name: RABBITMQ_VHOST
+              value: "puj_vhost"
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: SMTP_HOST }
+            - name: SMTP_PORT
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: SMTP_PORT }
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: SMTP_USER }
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: SMTP_PASSWORD }
+            - name: SMTP_FROM
+              value: "no-reply@puj.edu.co"
+            - name: SMTP_FROM_NAME
+              value: "Plataforma de Aprendizaje PUJ"
+            - name: SMTP_ENABLED
+              value: "true"
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 90
+            periodSeconds: 30
+          resources:
+            requests: { memory: "256Mi", cpu: "200m" }
+            limits:   { memory: "512Mi", cpu: "500m" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: email-service
+  namespace: puj-platform
+spec:
+  selector:
+    app: email-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+# No HPA: el cuello de botella es el rate limit de SMTP, no CPU/RAM.
+# 2 réplicas dan redundancia. Escala manual si el volumen de correos crece.

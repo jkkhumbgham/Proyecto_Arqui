@@ -1,0 +1,280 @@
+version: "3.9"
+
+networks:
+  platform-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+
+services:
+
+  # ─── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: puj-postgres
+    environment:
+      POSTGRES_USER: puj_admin
+      POSTGRES_PASSWORD: puj_secret
+      POSTGRES_DB: learning_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U puj_admin -d learning_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: puj-redis
+    command: redis-server --requirepass redis_secret --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - platform-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_secret", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: puj-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: puj_rabbit
+      RABBITMQ_DEFAULT_PASS: rabbit_secret
+      RABBITMQ_DEFAULT_VHOST: puj_vhost
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks:
+      - platform-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ─── Services ────────────────────────────────────────────────────────────────
+
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+    container_name: puj-user-service
+    environment:
+      DB_URL: jdbc:postgresql://postgres:6432/learning_platform
+      DB_SCHEMA: users
+      DB_USER: puj_admin
+      DB_PASSWORD: puj_secret
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_secret
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: puj_rabbit
+      RABBITMQ_PASSWORD: rabbit_secret
+      RABBITMQ_VHOST: puj_vhost
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      JWT_ACCESS_TTL_SECONDS: 900
+      JWT_REFRESH_TTL_SECONDS: 604800
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - platform-net
+
+  course-service:
+    build:
+      context: .
+      dockerfile: services/course-service/Dockerfile
+    container_name: puj-course-service
+    environment:
+      DB_URL: jdbc:postgresql://postgres:6432/learning_platform
+      DB_SCHEMA: courses
+      DB_USER: puj_admin
+      DB_PASSWORD: puj_secret
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_secret
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: puj_rabbit
+      RABBITMQ_PASSWORD: rabbit_secret
+      RABBITMQ_VHOST: puj_vhost
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      AWS_REGION: us-east-1
+      AWS_S3_BUCKET: puj-learning-resources
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      USER_SERVICE_URL: http://user-service:8080
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - platform-net
+
+  assessment-service:
+    build:
+      context: .
+      dockerfile: services/assessment-service/Dockerfile
+    container_name: puj-assessment-service
+    environment:
+      DB_URL: jdbc:postgresql://postgres:6432/learning_platform
+      DB_SCHEMA: assessments
+      DB_USER: puj_admin
+      DB_PASSWORD: puj_secret
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_secret
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: puj_rabbit
+      RABBITMQ_PASSWORD: rabbit_secret
+      RABBITMQ_VHOST: puj_vhost
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      COURSE_SERVICE_URL: http://course-service:8080
+      USER_SERVICE_URL: http://user-service:8080
+    ports:
+      - "8083:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - platform-net
+
+  collaboration-service:
+    build:
+      context: .
+      dockerfile: services/collaboration-service/Dockerfile
+    container_name: puj-collaboration-service
+    environment:
+      DB_URL: jdbc:postgresql://postgres:6432/learning_platform
+      DB_SCHEMA: collaboration
+      DB_USER: puj_admin
+      DB_PASSWORD: puj_secret
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_secret
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: puj_rabbit
+      RABBITMQ_PASSWORD: rabbit_secret
+      RABBITMQ_VHOST: puj_vhost
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      USER_SERVICE_URL: http://user-service:8080
+    ports:
+      - "8084:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - platform-net
+
+  analytics-service:
+    build:
+      context: services/analytics-service
+      dockerfile: Dockerfile
+    container_name: puj-analytics-service
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=learning_platform;Username=puj_admin;Password=puj_secret;SearchPath=analytics"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__Username: puj_rabbit
+      RabbitMQ__Password: rabbit_secret
+      RabbitMQ__VirtualHost: puj_vhost
+      Jwt__PublicKey: ${JWT_PUBLIC_KEY}
+      ASPNETCORE_URLS: http://+:8080
+    ports:
+      - "8085:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - platform-net
+
+  email-service:
+    build:
+      context: .
+      dockerfile: services/email-service/Dockerfile
+    container_name: puj-email-service
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: puj_rabbit
+      RABBITMQ_PASSWORD: rabbit_secret
+      RABBITMQ_VHOST: puj_vhost
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_FROM: no-reply@puj.edu.co
+      SMTP_ENABLED: "true"
+    ports:
+      - "8086:8080"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - platform-net
+
+  # MailHog — captura correos en local sin enviarlos (UI en http://localhost:8025)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: puj-mailhog
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - platform-net
+
+  web-ui:
+    build:
+      context: .
+      dockerfile: frontend/web-ui/Dockerfile
+    container_name: puj-web-ui
+    environment:
+      USER_SERVICE_URL: http://user-service:8080
+      COURSE_SERVICE_URL: http://course-service:8080
+      ASSESSMENT_SERVICE_URL: http://assessment-service:8080
+      COLLABORATION_SERVICE_URL: http://collaboration-service:8080
+      ANALYTICS_SERVICE_URL: http://analytics-service:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      - user-service
+    networks:
+      - platform-net

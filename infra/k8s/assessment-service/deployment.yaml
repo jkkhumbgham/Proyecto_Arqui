@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assessment-service
+  namespace: puj-platform
+  labels:
+    app: assessment-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: assessment-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: assessment-service
+    spec:
+      containers:
+        - name: assessment-service
+          image: REGISTRY/puj/assessment-service:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_URL
+              value: "jdbc:postgresql://postgres:6432/learning_platform"
+            - name: DB_SCHEMA
+              value: "assessments"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: DB_USER }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: DB_PASSWORD }
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: REDIS_PASSWORD }
+            - name: RABBITMQ_HOST
+              value: "rabbitmq"
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: RABBITMQ_USER }
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: RABBITMQ_PASSWORD }
+            - name: RABBITMQ_VHOST
+              value: "puj_vhost"
+            - name: JWT_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef: { name: platform-secrets, key: JWT_PUBLIC_KEY }
+            - name: COURSE_SERVICE_URL
+              value: "http://course-service:8080"
+            - name: USER_SERVICE_URL
+              value: "http://user-service:8080"
+          readinessProbe:
+            httpGet:
+              path: /api/v1/assessments
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/v1/assessments
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: assessment-service
+  namespace: puj-platform
+spec:
+  selector:
+    app: assessment-service
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: assessment-service-hpa
+  namespace: puj-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: assessment-service
+  minReplicas: 2
+  maxReplicas: 8          # Más réplicas: evaluaciones son CPU-intensivas (auto-calificación)
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65   # umbral más bajo por la carga de calificación
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

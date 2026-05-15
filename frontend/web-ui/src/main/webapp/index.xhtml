@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/layout.xhtml">
+<ui:define name="pageTitle">Inicio</ui:define>
+<ui:define name="body">
+    <f:metadata>
+        <f:viewAction action="#{loginBean.redirectIfAuthenticated}"/>
+    </f:metadata>
+    <div class="login-page">
+        <div class="login-box" style="text-align:center;">
+            <div class="logo">
+                <h1>Plataforma de Aprendizaje Adaptativo</h1>
+                <p>Pontificia Universidad Javeriana — 2026</p>
+            </div>
+            <div style="margin-top:1.5rem;display:flex;gap:.75rem;justify-content:center;">
+                <h:link value="Iniciar sesión" outcome="/views/login"    styleClass="btn btn-primary"/>
+                <h:link value="Registrarse"    outcome="/views/register" styleClass="btn btn-secondary"/>
+            </div>
+        </div>
+    </div>
+</ui:define>
+</ui:composition>
+</html>

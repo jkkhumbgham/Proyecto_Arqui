@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-sql
+  namespace: puj-platform
+data:
+  init.sql: |
+    CREATE SCHEMA IF NOT EXISTS users;
+    CREATE SCHEMA IF NOT EXISTS courses;
+    CREATE SCHEMA IF NOT EXISTS assessments;
+    CREATE SCHEMA IF NOT EXISTS collaboration;
+    CREATE SCHEMA IF NOT EXISTS analytics;
+    GRANT ALL PRIVILEGES ON SCHEMA users        TO puj_admin;
+    GRANT ALL PRIVILEGES ON SCHEMA courses      TO puj_admin;
+    GRANT ALL PRIVILEGES ON SCHEMA assessments  TO puj_admin;
+    GRANT ALL PRIVILEGES ON SCHEMA collaboration TO puj_admin;
+    GRANT ALL PRIVILEGES ON SCHEMA analytics    TO puj_admin;
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+  namespace: puj-platform
+data:
+  rabbitmq.conf: |
+    loopback_users.guest = false
+    load_definitions = /etc/rabbitmq/definitions.json
+  definitions.json: |
+    {
+      "vhosts": [{ "name": "puj_vhost" }],
+      "exchanges": [
+        { "name": "platform.events", "vhost": "puj_vhost", "type": "topic", "durable": true },
+        { "name": "platform.dlx",    "vhost": "puj_vhost", "type": "fanout","durable": true }
+      ],
+      "queues": [
+        { "name": "analytics.results",    "vhost": "puj_vhost", "durable": true,
+          "arguments": { "x-dead-letter-exchange": "platform.dlx", "x-message-ttl": 86400000 }},
+        { "name": "email.notifications",  "vhost": "puj_vhost", "durable": true,
+          "arguments": { "x-dead-letter-exchange": "platform.dlx", "x-message-ttl": 86400000 }},
+        { "name": "dead.letter.queue",    "vhost": "puj_vhost", "durable": true }
+      ],
+      "bindings": [
+        { "source": "platform.events", "vhost": "puj_vhost", "destination": "analytics.results",
+          "destination_type": "queue", "routing_key": "analytics.#" },
+        { "source": "platform.events", "vhost": "puj_vhost", "destination": "email.notifications",
+          "destination_type": "queue", "routing_key": "email.#" },
+        { "source": "platform.dlx",    "vhost": "puj_vhost", "destination": "dead.letter.queue",
+          "destination_type": "queue", "routing_key": "#" }
+      ]
+    }

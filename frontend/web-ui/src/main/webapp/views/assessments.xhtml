@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Evaluaciones</ui:define>
+<ui:define name="content">
+
+    <h2 class="page-title">Evaluaciones</h2>
+
+    <div class="card-grid">
+        <ui:repeat value="#{assessmentBean.assessments}" var="a">
+            <div class="card">
+                <strong>#{a.title}</strong>
+                <p style="font-size:.85rem;color:#666;margin:.4rem 0;">
+                    Puntaje total: <strong>#{a.totalPoints}</strong> pts
+                </p>
+                <h:form>
+                    <h:commandButton value="Iniciar evaluación" action="#{assessmentBean.startSubmission}"
+                                     styleClass="btn btn-primary btn-sm" style="margin-top:.5rem;">
+                        <f:setPropertyActionListener target="#{assessmentBean.selectedAssessmentId}"
+                                                     value="#{a.id}"/>
+                    </h:commandButton>
+                </h:form>
+            </div>
+        </ui:repeat>
+    </div>
+
+    <h:panelGroup rendered="#{empty assessmentBean.assessments}">
+        <div class="card" style="text-align:center;color:#888;">
+            No hay evaluaciones disponibles para tus cursos.
+        </div>
+    </h:panelGroup>
+
+</ui:define>
+</ui:composition>
+</html>
