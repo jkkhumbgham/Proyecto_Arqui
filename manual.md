@@ -11,9 +11,10 @@
 4. [Ver la UI web](#4-ver-la-ui-web)
 5. [Inspeccionar la base de datos](#5-inspeccionar-la-base-de-datos)
 6. [Correr en Kubernetes (EKS)](#6-correr-en-kubernetes-eks)
-7. [Probar el sistema comando a comando](#7-probar-el-sistema-comando-a-comando)
-8. [Ejecutar los tests unitarios](#8-ejecutar-los-tests-unitarios)
-9. [Mapa de puertos (local)](#9-mapa-de-puertos-local)
+7. [Del local a producción (SAD/SRS)](#7-del-local-a-producción-sadsrs)
+8. [Probar el sistema comando a comando](#8-probar-el-sistema-comando-a-comando)
+9. [Ejecutar los tests unitarios](#9-ejecutar-los-tests-unitarios)
+10. [Mapa de puertos (local)](#10-mapa-de-puertos-local)
 
 ---
 
@@ -427,11 +428,69 @@ kubectl logs -n puj-platform deployment/user-service --follow
 
 ---
 
-## 7. Probar el sistema comando a comando
+## 7. Del local a producción (SAD/SRS)
+
+Esta sección describe qué cambia entre el entorno local (`docker compose`) y el despliegue planteado en el SAD/SRS (AWS EKS), y qué pasos adicionales hay que ejecutar.
+
+### 7.1 Qué es diferente
+
+| Aspecto | Local | Producción |
+|---|---|---|
+| Base de datos | PostgreSQL directo en contenedor (puerto 5432) | PostgreSQL 15 + PgBouncer sidecar (puerto 6432) |
+| Conexiones DB | Directas desde cada servicio | Pool de conexiones vía PgBouncer en modo `transaction` |
+| Correo | MailHog local sin auth ni TLS (puerto 1025) | SMTP institucional con `SMTP_AUTH=true` y `SMTP_STARTTLS=true` (puerto 587) |
+| Archivos de curso | S3 no disponible; endpoints de upload fallan | AWS S3 con URLs prefirmadas (15 min PUT, 1 h GET) |
+| HTTPS / dominio | Sin TLS, acceso directo por puertos | AWS ALB + ACM certificate en `platform.puj.edu.co` |
+| Escalado | 1 réplica por servicio | HPA: 2–8 réplicas por CPU; `terminationGracePeriodSeconds: 60` en collaboration-service |
+| Secretos | Archivo `.env` en la máquina local | Kubernetes Secret `platform-secrets` en namespace `puj-platform` |
+| Imágenes Docker | Build local por docker compose | Build + push a ECR con `scripts/ecr-push.sh` |
+| Sticky sessions (JSF) | Innecesario con 1 réplica | `sessionAffinity: ClientIP` en el Service de web-ui |
+| WebSocket multi-réplica | Un único pod, coordinación innecesaria | Redis Pub/Sub coordina mensajes entre pods de collaboration-service |
+
+### 7.2 Componentes del SAD que no aplican en local
+
+- **PgBouncer**: en local postgres corre directo (puerto 5432). En K8s corre como sidecar en el pod de postgres (puerto 6432); el manifesto `infra/k8s/postgres/deployment.yaml` ya lo incluye.
+- **Redis Pub/Sub para WebSocket**: con 1 réplica en local no se necesita. En K8s, cuando el HPA escala collaboration-service a 2+ pods, los mensajes de WebSocket se enrutan entre pods vía Redis.
+- **HPA y `terminationGracePeriodSeconds: 60`**: solo tienen efecto con múltiples réplicas en K8s.
+- **Disponibilidad 99.5%**: requiere HPA + readiness probes (ya configurados) + RDS Multi-AZ o un PVC `ReadWriteOnce`.
+- **Cumplimiento Ley 1581**: el consentimiento explícito y el soft-delete funcionan igual en ambos entornos. En producción los datos deben residir en región América (`us-east-1`, ya configurado en los manifiestos).
+
+### 7.3 Pasos adicionales para producción
+
+Los pasos de build y push de imágenes y de creación de secretos ya están en [§ 6.1](#61-build-y-push-de-imágenes) y [§ 6.2](#62-crear-secretos-reales-no-commitear-en-git). Lo que hay que agregar a esos pasos:
+
+**Variables de entorno extra que no existen en local:**
+
+```bash
+# En el secret de K8s añadir también:
+--from-literal=SMTP_HOST=smtp.puj.edu.co \
+--from-literal=SMTP_PORT=587 \
+--from-literal=SMTP_USER=no-reply@puj.edu.co \
+--from-literal=SMTP_PASSWORD=<contraseña_smtp>
+```
+
+El email-service K8s ya tiene `SMTP_AUTH=true` y `SMTP_STARTTLS=true` en su Deployment. En local esas variables valen `false` (en `docker-compose.yml`) para ser compatibles con MailHog.
+
+**Configurar dominio e HTTPS:**
+
+Una vez que `kubectl apply -k infra/k8s/` asigne IP al Ingress (~2 min), crear un registro DNS tipo `A` o `CNAME` que apunte `platform.puj.edu.co` a esa IP. El Ingress en `infra/k8s/ingress.yaml` ya tiene la anotación de ACM configurada.
+
+**Verificar que PgBouncer está activo:**
+
+```bash
+# El pod postgres debe tener dos contenedores: pgbouncer + postgres
+kubectl get pods -n puj-platform -l app=postgres
+kubectl describe pod -n puj-platform <nombre-pod-postgres>
+# Buscar: "pgbouncer" y "postgres" en la lista de containers
+```
+
+---
+
+## 8. Probar el sistema comando a comando
 
 Todos los ejemplos apuntan al entorno local (Docker Compose).
 
-### 7.1 Registro e inicio de sesión
+### 8.1 Registro e inicio de sesión
 
 ```bash
 # Registrarse (el consentimiento es obligatorio por Ley 1581)
@@ -456,7 +515,7 @@ echo $TOKEN
 
 Después del registro, abre **http://localhost:8025** (MailHog) y verás el correo de bienvenida.
 
-### 7.2 Verificar bloqueo por intentos fallidos
+### 8.2 Verificar bloqueo por intentos fallidos
 
 ```bash
 # 5 intentos con contraseña incorrecta
@@ -473,7 +532,7 @@ curl -s -X POST http://localhost:8081/api/v1/auth/login \
 # → "Cuenta bloqueada por intentos fallidos..."
 ```
 
-### 7.3 Crear un curso e inscribirse
+### 8.3 Crear un curso e inscribirse
 
 ```bash
 # Crear curso (requiere rol INSTRUCTOR)
@@ -497,7 +556,7 @@ curl -s -X POST "http://localhost:8082/api/v1/enrollments/courses/$COURSE_ID" \
 open http://localhost:8025
 ```
 
-### 7.4 Probar el motor adaptativo
+### 8.4 Probar el motor adaptativo
 
 ```bash
 ASSESSMENT_ID=<uuid-de-una-evaluacion>
@@ -537,7 +596,7 @@ docker compose exec redis redis-cli -a redis_secret \
   DEL "adaptive:rule:$ASSESSMENT_ID"
 ```
 
-### 7.5 Chat en tiempo real (WebSocket)
+### 8.5 Chat en tiempo real (WebSocket)
 
 ```bash
 # Instalar wscat si no lo tienes
@@ -552,7 +611,7 @@ wscat -c "ws://localhost:8084/ws/groups/<group-id>?token=$TOKEN2"
 # Escribir en terminal 1 y ver cómo aparece en terminal 2 en tiempo real
 ```
 
-### 7.6 Dashboard de analítica
+### 8.6 Dashboard de analítica
 
 ```bash
 # Requiere rol DIRECTOR o ADMIN
@@ -563,7 +622,7 @@ curl -s "http://localhost:8085/api/v1/analytics/dashboard/top-courses" \
   -H "Authorization: Bearer $DIRECTOR_TOKEN" | jq
 ```
 
-### 7.7 Exportar reportes
+### 8.7 Exportar reportes
 
 ```bash
 # CSV de cursos
@@ -583,7 +642,7 @@ courseId=$COURSE_ID&from=2026-01-01&to=2026-12-31" \
   -o submissions.csv
 ```
 
-### 7.8 Ver correos enviados (MailHog)
+### 8.8 Ver correos enviados (MailHog)
 
 ```bash
 # Interfaz web
@@ -593,7 +652,7 @@ open http://localhost:8025
 curl -s http://localhost:8025/api/v2/messages | jq '.items[0].Content.Headers.Subject'
 ```
 
-### 7.9 Ver colas de RabbitMQ
+### 8.9 Ver colas de RabbitMQ
 
 ```bash
 open http://localhost:15672
@@ -601,7 +660,7 @@ open http://localhost:15672
 # Ir a Queues → ver mensajes pendientes en analytics.results y email.notifications
 ```
 
-### 7.10 Simular fallo de Redis (fallback adaptativo)
+### 8.10 Simular fallo de Redis (fallback adaptativo)
 
 ```bash
 # Parar Redis
@@ -617,7 +676,7 @@ docker compose start redis
 
 ---
 
-## 8. Ejecutar los tests unitarios
+## 9. Ejecutar los tests unitarios
 
 ### Todos los módulos Java de una vez
 
@@ -652,7 +711,7 @@ dotnet test
 
 ---
 
-## 9. Mapa de puertos (local)
+## 10. Mapa de puertos (local)
 
 | Puerto | Servicio | URL |
 |---|---|---|

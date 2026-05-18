@@ -2,12 +2,14 @@
 **Pontificia Universidad Javeriana · 2026**  
 Equipo: Laura Juliana Garzón Arias · Juan Camilo Alba Castro · Carlos Manuel Villegas Ruiz · Arley Bernal Muñetón
 
+> Instrucciones de configuración, ejecución, pruebas y despliegue en **[manual.md](manual.md)**.
+
 ---
 
 ## Tabla de contenidos
 
 1. [Qué es esto](#1-qué-es-esto)
-2. [Correr en local](#2-correr-en-local)
+2. [Correr en local — resumen rápido](#2-correr-en-local--resumen-rápido)
 3. [Del local a producción](#3-del-local-a-producción)
 4. [Estructura del repositorio](#4-estructura-del-repositorio)
 5. [Decisiones de implementación](#5-decisiones-de-implementación)
@@ -25,166 +27,36 @@ La plataforma es para instituciones colombianas, lo que impone cumplir la **Ley 
 
 ---
 
-## 2. Correr en local
-
-### Prerrequisitos
-
-| Herramienta | Versión mínima | Para qué |
-|---|---|---|
-| Docker + Docker Compose | 24 / 2.24 | Único requisito obligatorio para correr el stack |
-| openssl | cualquiera | Generar par RSA para JWT (lo usa el script de setup) |
-| Java 17 + Maven 3.9 | — | Solo si compilas los servicios Java fuera de Docker |
-| .NET SDK 8 | — | Solo si compilas analytics-service fuera de Docker |
-
-### Paso 1 — Configuración inicial (solo una vez)
+## 2. Correr en local — resumen rápido
 
 ```bash
+# 1. Generar claves JWT y crear .env (solo la primera vez)
 bash scripts/setup-env.sh
-```
 
-El script crea el archivo `.env` y genera automáticamente el par RSA 2048 para JWT. La salida indica qué variables están listas y cuáles quedan pendientes.
-
-Las variables de AWS y SMTP **son opcionales en local**:
-
-| Variable | Qué pasa si se deja vacía |
-|---|---|
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Solo fallan los endpoints de subida de archivos a S3; todo lo demás funciona |
-| `REGISTRY` | Solo para push a ECR (producción); irrelevante en local |
-| `SMTP_USER` / `SMTP_PASSWORD` | En local el email-service usa MailHog automáticamente; nunca se envían correos reales |
-
-### Paso 2 — Levantar el stack
-
-```bash
+# 2. Levantar todo
 docker compose up -d
 ```
 
-Los servicios Java (WildFly) tardan ~60 segundos en arrancar. Para seguir el progreso:
+Las variables de AWS y SMTP son opcionales: sin ellas, la subida de archivos a S3 y el envío de correos reales no funcionan, pero el resto del stack sí. Los correos quedan capturados en **MailHog** — http://localhost:8025.
 
-```bash
-docker compose logs -f user-service
-# Esperar: "WildFly Full 31.0.0.Final started"
-```
-
-### Paso 3 — Verificar que todo está vivo
-
-```bash
-curl -s http://localhost:8081/api/v1/auth/me   # → {"error":"UNAUTHORIZED",...}
-curl -s http://localhost:8085/health            # → {"status":"UP"}
-curl -s http://localhost:8086/health            # → {"status":"UP"}
-```
-
-### Accesos rápidos
-
-| URL | Qué es |
-|---|---|
-| http://localhost:8080 | UI web (JSF) |
-| http://localhost:8025 | MailHog — todos los correos enviados en local |
-| http://localhost:15672 | RabbitMQ management (`puj_rabbit` / `rabbit_secret`) |
-| http://localhost:8081/api/v1 | user-service API |
-| http://localhost:8082/api/v1 | course-service API |
-| http://localhost:8083/api/v1 | assessment-service API |
-| http://localhost:8084/api/v1 | collaboration-service API + WebSocket |
-| http://localhost:8085/api/v1 | analytics-service API |
-
-> Para instrucciones detalladas (pruebas con curl, base de datos, WebSocket, RabbitMQ, Kubernetes) ver **[manual.md](manual.md)**.
+Ver **[manual.md](manual.md)** para la guía completa: puertos, pruebas con curl, base de datos, WebSocket, RabbitMQ y despliegue en Kubernetes.
 
 ---
 
 ## 3. Del local a producción
 
-El SAD y SRS plantean un despliegue en **AWS EKS** con PostgreSQL, Redis y RabbitMQ gestionados. Esta sección describe exactamente qué cambia y en qué orden habilitarlo.
+El SAD y SRS plantean un despliegue en AWS EKS. Esta tabla resume qué cambia entre entornos; los pasos exactos están en el [manual.md § 6](manual.md#6-correr-en-kubernetes-eks) y [§ 7 — Del local a producción](manual.md#7-del-local-a-producción-sadsr).
 
-### Diferencias entre entornos
-
-| Aspecto | Local (docker compose) | Producción (AWS EKS) |
+| Aspecto | Local (`docker compose`) | Producción (AWS EKS) |
 |---|---|---|
-| Base de datos | PostgreSQL directo en contenedor (puerto 5432) | PostgreSQL 15 + PgBouncer sidecar (puerto 6432) |
-| Conexiones DB | Directas desde cada servicio | Pool de conexiones vía PgBouncer en modo `transaction` |
-| Correo | MailHog local (puerto 1025, sin auth ni TLS) | SMTP institucional con `SMTP_AUTH=true` y `SMTP_STARTTLS=true` (puerto 587) |
-| Archivos de curso | S3 no disponible | AWS S3 con URLs prefirmadas (15 min PUT, 1 h GET) |
-| HTTPS / dominio | Sin TLS, acceso por puertos | AWS ALB + ACM certificate en `platform.puj.edu.co` |
-| Escalado | 1 réplica por servicio | HPA: 2–8 réplicas por CPU; `terminationGracePeriodSeconds: 60` en collaboration-service |
+| Base de datos | PostgreSQL directo (puerto 5432) | PostgreSQL 15 + PgBouncer sidecar (puerto 6432) |
+| Correo | MailHog local (sin auth ni TLS) | SMTP institucional con `SMTP_AUTH=true` y `SMTP_STARTTLS=true` |
+| Archivos de curso | S3 no disponible | AWS S3 con URLs prefirmadas |
+| HTTPS / dominio | Sin TLS, acceso directo por puertos | AWS ALB + ACM certificate en `platform.puj.edu.co` |
+| Escalado | 1 réplica por servicio | HPA: 2–8 réplicas; `terminationGracePeriodSeconds: 60` en collaboration-service |
 | Secretos | Archivo `.env` en la máquina | Kubernetes Secret `platform-secrets` en namespace `puj-platform` |
-| Imágenes Docker | Build local por docker compose | Build + push a ECR con `scripts/ecr-push.sh` |
+| Imágenes Docker | Build local | Push a ECR con `scripts/ecr-push.sh` |
 | Sticky sessions (JSF) | Innecesario (1 réplica) | `sessionAffinity: ClientIP` en el Service de web-ui |
-| Componentes que no existen en local | — | PgBouncer, ALB Ingress Controller, HPA, Redis Pub/Sub multi-réplica |
-
-### Pasos para desplegar en producción
-
-#### 1. Completar el `.env` con valores reales
-
-Después de `bash scripts/setup-env.sh`, editar `.env` y llenar:
-
-```
-AWS_ACCESS_KEY_ID=AKIA...
-AWS_SECRET_ACCESS_KEY=...
-REGISTRY=123456789.dkr.ecr.us-east-1.amazonaws.com
-SMTP_USER=no-reply@puj.edu.co
-SMTP_PASSWORD=...
-```
-
-#### 2. Crear el cluster EKS
-
-```bash
-eksctl create cluster --name puj-platform --region us-east-1 --nodes 3 --node-type t3.medium
-```
-
-PostgreSQL, Redis y RabbitMQ pueden usarse como deployments K8s (ya incluidos en `infra/k8s/`) o como servicios gestionados de AWS (RDS, ElastiCache, AmazonMQ).
-
-#### 3. Crear secretos en Kubernetes
-
-```bash
-kubectl create namespace puj-platform
-
-kubectl create secret generic platform-secrets \
-  --namespace puj-platform \
-  --from-literal=DB_USER=puj_admin \
-  --from-literal=DB_PASSWORD=<contraseña_segura> \
-  --from-literal=REDIS_PASSWORD=<contraseña_redis> \
-  --from-literal=RABBITMQ_USER=puj_rabbit \
-  --from-literal=RABBITMQ_PASSWORD=<contraseña_rabbit> \
-  --from-literal=JWT_PRIVATE_KEY="$(cat jwt_private.pem)" \
-  --from-literal=JWT_PUBLIC_KEY="$(cat jwt_public.pem)" \
-  --from-literal=AWS_ACCESS_KEY_ID=AKIA... \
-  --from-literal=AWS_SECRET_ACCESS_KEY=... \
-  --from-literal=SMTP_HOST=smtp.puj.edu.co \
-  --from-literal=SMTP_PORT=587 \
-  --from-literal=SMTP_USER=no-reply@puj.edu.co \
-  --from-literal=SMTP_PASSWORD=...
-```
-
-> `jwt_private.pem` y `jwt_public.pem` los generó `setup-env.sh` en la raíz del repositorio. **Nunca commitear estos archivos.**
-
-#### 4. Build y push de imágenes a ECR
-
-```bash
-bash scripts/ecr-push.sh          # usa tag :latest
-bash scripts/ecr-push.sh v1.0.0   # usa tag :v1.0.0 y :latest
-```
-
-El script hace login a ECR, construye las 7 imágenes y hace push. También reemplaza el placeholder `REGISTRY` en los `deployment.yaml`.
-
-#### 5. Desplegar
-
-```bash
-kubectl apply -k infra/k8s/
-kubectl get pods -n puj-platform -w   # esperar a que todos estén Running
-kubectl get ingress -n puj-platform   # obtener la IP del ALB
-```
-
-El orden lo controla `infra/k8s/kustomization.yaml`: namespace → secrets → configmaps → postgres (con PgBouncer) → redis → rabbitmq → servicios → ingress.
-
-#### 6. Apuntar el DNS
-
-Una vez que el Ingress tenga IP asignada (~2 min), crear un registro DNS tipo `A` o `CNAME` que apunte `platform.puj.edu.co` a esa IP.
-
-### Componentes del SAD que solo aplican en producción
-
-- **PgBouncer**: en local postgres corre directo (puerto 5432). En K8s corre como sidecar en el pod de postgres (puerto 6432) — los manifiestos ya lo incluyen en `infra/k8s/postgres/deployment.yaml`.
-- **Redis Pub/Sub para WebSocket**: con 1 réplica en local no se necesita. En K8s, cuando el HPA escala collaboration-service a 2+ réplicas, los pods se coordinan vía Redis para entregar mensajes a sesiones WebSocket en otros pods.
-- **HPA y `terminationGracePeriodSeconds: 60`**: solo tienen efecto con múltiples réplicas en K8s.
-- **Disponibilidad 99.5%**: requiere HPA + readiness probes (ya configurados) + RDS Multi-AZ o el PVC con `ReadWriteOnce` del deployment de postgres.
-- **Cumplimiento Ley 1581**: el consentimiento explícito y el soft-delete funcionan igual en ambos entornos. En producción, los datos deben residir en región América (`us-east-1` ya está configurado en los manifiestos).
 
 ---
 
@@ -202,7 +74,7 @@ Una vez que el Ingress tenga IP asignada (~2 min), crear un registro DNS tipo `A
 │   ├── assessment-service/Evaluaciones, calificación, adaptativo → WildFly 31 / Jakarta EE 10
 │   ├── collaboration-service/ Foros, grupos, WebSocket          → WildFly 31 / Jakarta EE 10
 │   ├── analytics-service/ Métricas, dashboards, exportación     → .NET 8 / ASP.NET Core
-│   └── email-service/     Consumer SMTP, templates HTML         → WildFly 31 / Jakarta EE 10
+│   └── email-service/     Consumer RabbitMQ + SMTP Jakarta Mail → WildFly 31 / Jakarta EE 10
 │
 ├── frontend/
 │   └── web-ui/            JSF (MPA), un bean por pantalla        → WildFly 31 / Jakarta EE 10
@@ -218,7 +90,7 @@ Una vez que el Ingress tenga IP asignada (~2 min), crear un registro DNS tipo `A
 │   └── ecr-push.sh        Build y push de todas las imágenes a ECR
 │
 ├── .env.example           Plantilla de variables de entorno (segura para git)
-├── manual.md              Instrucciones detalladas de ejecución y pruebas
+├── manual.md              Instrucciones completas de ejecución y despliegue
 ├── docker-compose.yml     Entorno local completo
 └── pom.xml                Parent Maven multi-módulo
 ```
@@ -259,22 +131,24 @@ HS256 usa una clave simétrica: todos los servicios que verifican tokens necesit
 
 Los datos académicos tienen valor histórico: si un estudiante completa un curso y luego se da de baja, los registros de inscripción y evaluación deben seguir existiendo para los reportes del DIRECTOR. Con DELETE físico, borrar un usuario rompería los dashboards históricos. Soft delete (`deleted_at`) preserva la integridad referencial sin necesidad de ON DELETE SET NULL en todas las tablas. El costo es que todas las queries deben filtrar por `deleted_at IS NULL`, lo que se garantiza a nivel de repositorio.
 
-### Jakarta Mail (Angus Mail) para el email-service
+### Jakarta Mail para el email-service
 
-El email-service usa `jakarta.mail` con Angus Mail como implementación de referencia. La configuración del Session se controla por variables de entorno:
+El email-service usa `jakarta.mail` con Angus Mail como implementación. La sesión SMTP se configura por variables de entorno, lo que permite que el mismo binario funcione en ambos entornos sin cambiar código:
 
-- **Local (MailHog)**: `SMTP_AUTH=false`, `SMTP_STARTTLS=false`, host `mailhog`, puerto `1025`. MailHog no soporta autenticación ni TLS, por lo que ambas opciones se deshabilitan. Todos los correos quedan capturados en `http://localhost:8025`.
-- **Producción (SMTP institucional)**: `SMTP_AUTH=true`, `SMTP_STARTTLS=true`, host y credenciales del servidor institucional. Los manifiestos K8s de `email-service` ya los tienen configurados.
-
-El mismo código funciona en ambos entornos; solo cambian las variables de entorno.
+- **Local**: `SMTP_AUTH=false`, `SMTP_STARTTLS=false`, apuntando a MailHog en `mailhog:1025`
+- **Producción**: `SMTP_AUTH=true`, `SMTP_STARTTLS=true`, apuntando al SMTP institucional en el puerto 587
 
 ### MailHog en entorno local
 
-MailHog es un servidor SMTP falso que captura todos los correos sin enviarlos y los muestra en una UI web. Esto evita enviar correos reales durante el desarrollo (lo que podría resultar en spam a usuarios reales o cargos en la cuenta SMTP). El email-service conecta a MailHog en local (puerto 1025) y al SMTP institucional en producción — la misma variable de entorno `SMTP_HOST` controla ambos sin cambiar código.
+MailHog es un servidor SMTP falso que captura todos los correos sin enviarlos y los muestra en una UI web. Esto evita enviar correos reales durante el desarrollo. El email-service conecta a MailHog en local (puerto 1025) y al SMTP institucional en producción — la misma variable `SMTP_HOST` controla ambos.
 
 ### Sin HPA en email-service
 
 Los otros servicios tienen HPA porque su cuello de botella es CPU o RAM: más réplicas = más capacidad. El email-service está limitado por el rate limit del servidor SMTP externo (típicamente 100-500 correos/minuto para cuentas institucionales). Añadir más réplicas solo causaría que múltiples pods intenten enviar simultáneamente y empiecen a recibir `Too Many Connections` del SMTP. La solución correcta para alto volumen de correos es RabbitMQ con prefetch=1 en una sola réplica activa, que ya está configurado.
+
+### terminationGracePeriodSeconds: 60 en collaboration-service
+
+Cuando Kubernetes mata un pod (por un deploy nuevo, por un scale-down, o por fallo), el proceso recibe SIGTERM. Sin un grace period, el pod muere instantáneamente y todas las conexiones WebSocket activas se cortan. Con 60 segundos, el pod termina de entregar los mensajes pendientes y los clientes WebSocket tienen tiempo de reconectar al nuevo pod. Los 60 segundos vienen de considerar que la mayoría de los mensajes de chat son instantáneos y que 60s es el timeout estándar de los proxies HTTP.
 
 ### DLX (Dead Letter Exchange) en RabbitMQ
 
@@ -283,7 +157,3 @@ Cuando un mensaje falla después de 3 reintentos (el consumer hace NACK con requ
 ### QuestPDF para exportación PDF
 
 La alternativa obvia era iText 7, pero su licencia AGPL obliga a liberar el código fuente de cualquier proyecto que lo use. QuestPDF usa licencia MIT sin restricciones. Su API fluent también produce código más legible: en lugar de coordinar manualmente posiciones X,Y en puntos, se trabaja con filas, columnas y celdas.
-
-### terminationGracePeriodSeconds: 60 en collaboration-service
-
-Cuando Kubernetes mata un pod (por un deploy nuevo, por un scale-down, o por fallo), el proceso recibe SIGTERM. Sin un grace period, el pod muere instantáneamente y todas las conexiones WebSocket activas se cortan. Con 60 segundos, el pod termina de entregar los mensajes pendientes y los clientes WebSocket tienen tiempo de reconectar al nuevo pod. Los 60 segundos vienen de considerar que la mayoría de los mensajes de chat son instantáneos y que 60s es el timeout estándar de los proxies HTTP.
