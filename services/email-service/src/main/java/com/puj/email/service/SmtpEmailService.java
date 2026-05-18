@@ -17,35 +17,46 @@ public class SmtpEmailService {
 
     private static final Logger LOG = Logger.getLogger(SmtpEmailService.class.getName());
 
-    private static final String SMTP_HOST = System.getenv().getOrDefault("SMTP_HOST", "smtp.puj.edu.co");
-    private static final int    SMTP_PORT = Integer.parseInt(System.getenv().getOrDefault("SMTP_PORT", "587"));
-    private static final String SMTP_USER = System.getenv().getOrDefault("SMTP_USER", "");
-    private static final String SMTP_PASS = System.getenv().getOrDefault("SMTP_PASSWORD", "");
-    private static final String FROM_ADDR = System.getenv().getOrDefault("SMTP_FROM", "no-reply@puj.edu.co");
-    private static final String FROM_NAME = System.getenv().getOrDefault("SMTP_FROM_NAME",
+    private static final String  SMTP_HOST     = System.getenv().getOrDefault("SMTP_HOST",     "mailhog");
+    private static final int     SMTP_PORT     = Integer.parseInt(System.getenv().getOrDefault("SMTP_PORT", "1025"));
+    private static final String  SMTP_USER     = System.getenv().getOrDefault("SMTP_USER",     "");
+    private static final String  SMTP_PASS     = System.getenv().getOrDefault("SMTP_PASSWORD", "");
+    private static final String  FROM_ADDR     = System.getenv().getOrDefault("SMTP_FROM",     "no-reply@puj.edu.co");
+    private static final String  FROM_NAME     = System.getenv().getOrDefault("SMTP_FROM_NAME",
             "Plataforma de Aprendizaje PUJ");
-    private static final boolean SMTP_ENABLED =
-            Boolean.parseBoolean(System.getenv().getOrDefault("SMTP_ENABLED", "true"));
+    private static final boolean SMTP_ENABLED  =
+            Boolean.parseBoolean(System.getenv().getOrDefault("SMTP_ENABLED",  "true"));
+    // false por defecto → compatible con MailHog; true en producción con SMTP real
+    private static final boolean SMTP_AUTH     =
+            Boolean.parseBoolean(System.getenv().getOrDefault("SMTP_AUTH",     "false"));
+    private static final boolean SMTP_STARTTLS =
+            Boolean.parseBoolean(System.getenv().getOrDefault("SMTP_STARTTLS", "false"));
 
     private Session mailSession;
 
     @PostConstruct
     void init() {
         Properties props = new Properties();
-        props.put("mail.smtp.host",            SMTP_HOST);
-        props.put("mail.smtp.port",            SMTP_PORT);
-        props.put("mail.smtp.auth",            "true");
-        props.put("mail.smtp.starttls.enable", "true");
-        props.put("mail.smtp.ssl.trust",       SMTP_HOST);
+        props.put("mail.smtp.host",              SMTP_HOST);
+        props.put("mail.smtp.port",              SMTP_PORT);
+        props.put("mail.smtp.auth",              String.valueOf(SMTP_AUTH));
+        props.put("mail.smtp.starttls.enable",   String.valueOf(SMTP_STARTTLS));
         props.put("mail.smtp.connectiontimeout", "5000");
         props.put("mail.smtp.timeout",           "10000");
+        if (SMTP_STARTTLS) {
+            props.put("mail.smtp.ssl.trust", SMTP_HOST);
+        }
 
-        mailSession = Session.getInstance(props, new Authenticator() {
-            @Override
-            protected PasswordAuthentication getPasswordAuthentication() {
-                return new PasswordAuthentication(SMTP_USER, SMTP_PASS);
-            }
-        });
+        if (SMTP_AUTH && !SMTP_USER.isEmpty()) {
+            mailSession = Session.getInstance(props, new Authenticator() {
+                @Override
+                protected PasswordAuthentication getPasswordAuthentication() {
+                    return new PasswordAuthentication(SMTP_USER, SMTP_PASS);
+                }
+            });
+        } else {
+            mailSession = Session.getInstance(props);
+        }
 
         LOG.info("SmtpEmailService inicializado — host=" + SMTP_HOST + ":" + SMTP_PORT
                 + " enabled=" + SMTP_ENABLED);

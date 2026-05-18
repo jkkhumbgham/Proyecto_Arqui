@@ -83,7 +83,11 @@ class AuthServiceTest {
     @Test
     void register_success_persistsAndPublishesEvents() {
         when(userRepo.existsByEmail(anyString())).thenReturn(false);
-        when(userRepo.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepo.save(any(User.class))).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            if (u.getId() == null) setField(u, "id", UUID.randomUUID());
+            return u;
+        });
 
         RegisterRequest req = new RegisterRequest(
                 "new@puj.edu.co", "pass12345", "Ana", "López", true);

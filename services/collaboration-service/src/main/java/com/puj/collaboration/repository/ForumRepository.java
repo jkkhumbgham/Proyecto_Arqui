@@ -1,6 +1,7 @@
 package com.puj.collaboration.repository;
 
 import com.puj.collaboration.entity.*;
+import com.puj.collaboration.entity.Thread;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;

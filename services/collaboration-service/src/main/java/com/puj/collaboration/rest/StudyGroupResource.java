@@ -4,7 +4,7 @@ import com.puj.collaboration.entity.ChatMessage;
 import com.puj.collaboration.entity.StudyGroup;
 import com.puj.collaboration.repository.StudyGroupRepository;
 import com.puj.collaboration.service.StudyGroupService;
-import com.puj.security.auth.AuthenticatedUser;
+import com.puj.security.rbac.AuthenticatedUser;
 import com.puj.security.rbac.RequiresRole;
 import com.puj.security.rbac.Role;
 import jakarta.inject.Inject;

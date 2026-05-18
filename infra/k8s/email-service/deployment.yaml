@@ -56,6 +56,10 @@ spec:
               value: "Plataforma de Aprendizaje PUJ"
             - name: SMTP_ENABLED
               value: "true"
+            - name: SMTP_AUTH
+              value: "true"
+            - name: SMTP_STARTTLS
+              value: "true"
           readinessProbe:
             httpGet: { path: /health, port: 8080 }
             initialDelaySeconds: 60

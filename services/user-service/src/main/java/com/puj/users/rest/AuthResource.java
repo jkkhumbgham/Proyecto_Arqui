@@ -10,6 +10,7 @@ import com.puj.users.dto.UserResponse;
 import com.puj.users.service.AuthService;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;

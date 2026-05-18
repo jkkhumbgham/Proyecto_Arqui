@@ -3,6 +3,7 @@ package com.puj.collaboration.rest;
 import com.puj.collaboration.dto.PostRequest;
 import com.puj.collaboration.dto.ThreadRequest;
 import com.puj.collaboration.entity.*;
+import com.puj.collaboration.entity.Thread;
 import com.puj.collaboration.repository.ForumRepository;
 import com.puj.security.rbac.AuthenticatedUser;
 import com.puj.security.rbac.RequiresRole;

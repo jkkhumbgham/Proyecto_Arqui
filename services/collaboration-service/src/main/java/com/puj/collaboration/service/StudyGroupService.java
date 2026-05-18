@@ -3,7 +3,7 @@ package com.puj.collaboration.service;
 import com.puj.collaboration.entity.GroupMember;
 import com.puj.collaboration.entity.StudyGroup;
 import com.puj.collaboration.repository.StudyGroupRepository;
-import com.puj.security.auth.AuthenticatedUser;
+import com.puj.security.rbac.AuthenticatedUser;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -40,14 +40,14 @@ public class StudyGroupService {
         StudyGroup g = new StudyGroup();
         g.setName(name);
         g.setCourseId(courseId);
-        g.setOwnerId(currentUser.getUserIdAsUUID());
+        g.setOwnerId(UUID.fromString(currentUser.getUserId()));
         g.setMaxMembers(maxMembers);
         repo.save(g);
 
         // creator joins automatically
         GroupMember m = new GroupMember();
         m.setGroup(g);
-        m.setUserId(currentUser.getUserIdAsUUID());
+        m.setUserId(UUID.fromString(currentUser.getUserId()));
         repo.addMember(m);
         return g;
     }
@@ -57,7 +57,7 @@ public class StudyGroupService {
         StudyGroup g = repo.findById(groupId)
                 .orElseThrow(() -> new NotFoundException("Grupo no encontrado."));
 
-        UUID userId = currentUser.getUserIdAsUUID();
+        UUID userId = UUID.fromString(currentUser.getUserId());
         if (repo.isMember(groupId, userId)) {
             throw new BadRequestException("Ya eres miembro de este grupo.");
         }

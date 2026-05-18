@@ -79,7 +79,7 @@ services:
       dockerfile: services/user-service/Dockerfile
     container_name: puj-user-service
     environment:
-      DB_URL: jdbc:postgresql://postgres:6432/learning_platform
+      DB_URL: jdbc:postgresql://postgres:5432/learning_platform
       DB_SCHEMA: users
       DB_USER: puj_admin
       DB_PASSWORD: puj_secret
@@ -113,7 +113,7 @@ services:
       dockerfile: services/course-service/Dockerfile
     container_name: puj-course-service
     environment:
-      DB_URL: jdbc:postgresql://postgres:6432/learning_platform
+      DB_URL: jdbc:postgresql://postgres:5432/learning_platform
       DB_SCHEMA: courses
       DB_USER: puj_admin
       DB_PASSWORD: puj_secret
@@ -147,7 +147,7 @@ services:
       dockerfile: services/assessment-service/Dockerfile
     container_name: puj-assessment-service
     environment:
-      DB_URL: jdbc:postgresql://postgres:6432/learning_platform
+      DB_URL: jdbc:postgresql://postgres:5432/learning_platform
       DB_SCHEMA: assessments
       DB_USER: puj_admin
       DB_PASSWORD: puj_secret
@@ -178,7 +178,7 @@ services:
       dockerfile: services/collaboration-service/Dockerfile
     container_name: puj-collaboration-service
     environment:
-      DB_URL: jdbc:postgresql://postgres:6432/learning_platform
+      DB_URL: jdbc:postgresql://postgres:5432/learning_platform
       DB_SCHEMA: collaboration
       DB_USER: puj_admin
       DB_PASSWORD: puj_secret
@@ -243,6 +243,8 @@ services:
       SMTP_PASSWORD: ""
       SMTP_FROM: no-reply@puj.edu.co
       SMTP_ENABLED: "true"
+      SMTP_AUTH: "false"
+      SMTP_STARTTLS: "false"
     ports:
       - "8086:8080"
     depends_on:
