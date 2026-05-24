@@ -8,14 +8,78 @@
 <ui:define name="pageTitle">Cursos</ui:define>
 <ui:define name="content">
 
+    <!-- Search bar (only for non-instructors/admins) -->
+    <h:panelGroup rendered="#{not sessionBean.hasRole('INSTRUCTOR') and not sessionBean.hasRole('ADMIN')}">
+    <div class="card" style="margin-bottom:1.5rem;padding:1rem 1.5rem;">
+        <h:form id="searchForm">
+            <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+                <h:inputText value="#{searchBean.q}" placeholder="Buscar cursos..."
+                             style="flex:1;min-width:180px;padding:.55rem .8rem;
+                                    border:1px solid #ddd;border-radius:6px;font-size:.95rem;"/>
+                <h:selectOneMenu value="#{searchBean.category}"
+                                 style="padding:.55rem .8rem;border:1px solid #ddd;border-radius:6px;font-size:.9rem;">
+                    <f:selectItem itemLabel="Todas las categorías" itemValue=""/>
+                    <f:selectItem itemLabel="Tecnología"           itemValue="Tecnología"/>
+                    <f:selectItem itemLabel="Ciencias"             itemValue="Ciencias"/>
+                    <f:selectItem itemLabel="Humanidades"          itemValue="Humanidades"/>
+                    <f:selectItem itemLabel="Negocios"             itemValue="Negocios"/>
+                    <f:selectItem itemLabel="Diseño"               itemValue="Diseño"/>
+                    <f:selectItem itemLabel="Salud"                itemValue="Salud"/>
+                </h:selectOneMenu>
+                <h:commandButton value="Buscar" action="#{searchBean.search}"
+                                 styleClass="btn btn-primary btn-sm"/>
+            </div>
+        </h:form>
+
+        <!-- Search results -->
+        <h:panelGroup rendered="#{searchBean.searched and searchBean.hasResults}">
+            <div style="margin-top:1rem;border-top:1px solid #e2e8f0;padding-top:1rem;">
+                <p style="color:#888;font-size:.85rem;margin-bottom:.75rem;">
+                    #{searchBean.total} resultado(s) para "#{searchBean.q}"
+                </p>
+                <div class="card-grid">
+                    <ui:repeat value="#{searchBean.results}" var="sr">
+                        <div class="card" style="display:flex;flex-direction:column;gap:.5rem;padding:1rem;">
+                            <strong style="color:#1a3a6b;">#{sr.title}</strong>
+                            <p style="font-size:.82rem;color:#888;margin:0;">#{sr.description}</p>
+                            <h:panelGroup rendered="#{not empty sr.category}">
+                                <span class="badge badge-blue" style="align-self:flex-start;font-size:.75rem;">#{sr.category}</span>
+                            </h:panelGroup>
+                            <h:link value="Ver curso" outcome="/views/course-detail"
+                                    styleClass="btn btn-secondary btn-sm" style="margin-top:auto;">
+                                <f:param name="courseId" value="#{sr.id}"/>
+                            </h:link>
+                        </div>
+                    </ui:repeat>
+                </div>
+            </div>
+        </h:panelGroup>
+
+        <h:panelGroup rendered="#{searchBean.searched and not searchBean.hasResults}">
+            <p style="margin-top:1rem;color:#888;font-size:.9rem;">
+                No se encontraron cursos para "#{searchBean.q}".
+            </p>
+        </h:panelGroup>
+    </div>
+    </h:panelGroup>
+
     <h2 class="page-title">Cursos</h2>
+
+    <!-- INSTRUCTOR: quick link to metrics dashboard -->
+    <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR')}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+            <h3 style="margin:0;color:#1a3a6b;">Mis cursos</h3>
+            <h:link value="Ver métricas" outcome="/views/dashboard"
+                    styleClass="btn btn-secondary btn-sm"/>
+        </div>
+    </h:panelGroup>
 
     <!-- Create-course form (INSTRUCTOR / ADMIN only) -->
     <c:if test="#{sessionBean.hasRole('INSTRUCTOR', 'ADMIN')}">
         <div class="card" style="margin-bottom:1.5rem;">
             <h3 style="margin-bottom:1rem;color:#1a3a6b;">Nuevo curso</h3>
             <h:form id="newCourseForm">
-                <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:1rem;align-items:end;">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:1rem;align-items:end;flex-wrap:wrap;">
                     <div class="form-group" style="margin:0;">
                         <label>Título</label>
                         <h:inputText value="#{courseBean.newTitle}" required="true"
@@ -28,6 +92,14 @@
                     <div class="form-group" style="margin:0;">
                         <label>Máx. estudiantes</label>
                         <h:inputText value="#{courseBean.newMaxStudents}"/>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Estado</label>
+                        <h:selectOneMenu value="#{courseBean.newStatus}"
+                                         style="padding:.55rem .5rem;border:1px solid #ddd;border-radius:6px;font-size:.9rem;">
+                            <f:selectItem itemValue="DRAFT"     itemLabel="Borrador"/>
+                            <f:selectItem itemValue="PUBLISHED" itemLabel="Publicado"/>
+                        </h:selectOneMenu>
                     </div>
                 </div>
                 <h:commandButton value="Crear curso" action="#{courseBean.createCourse}"
@@ -52,21 +124,41 @@
                 <p style="font-size:.875rem;color:#666;margin-bottom:.75rem;">#{course.description}</p>
                 <p style="font-size:.8rem;color:#999;">Máx: #{course.maxStudents} estudiantes</p>
 
-                <div style="margin-top:.85rem;display:flex;gap:.5rem;">
+                <div style="margin-top:.85rem;display:flex;gap:.5rem;flex-wrap:wrap;">
                     <c:if test="#{sessionBean.hasRole('STUDENT')}">
-                        <h:form>
-                            <h:inputHidden value="#{courseBean.selectedCourseId}" id="cid"/>
-                            <h:commandButton value="Inscribirse" action="#{courseBean.enroll}"
-                                             styleClass="btn btn-primary btn-sm"
-                                             rendered="#{course.status == 'PUBLISHED'}">
-                                <f:setPropertyActionListener target="#{courseBean.selectedCourseId}"
-                                                             value="#{course.id}"/>
-                            </h:commandButton>
-                        </h:form>
+                        <c:if test="#{courseBean.isEnrolled(course.id)}">
+                            <span class="badge badge-green" style="font-size:.78rem;padding:.3rem .65rem;">
+                                Inscrito
+                            </span>
+                        </c:if>
+                        <c:if test="#{not courseBean.isEnrolled(course.id)}">
+                            <h:form>
+                                <h:commandButton value="Inscribirse" action="#{courseBean.enroll}"
+                                                 styleClass="btn btn-primary btn-sm"
+                                                 rendered="#{course.status == 'PUBLISHED'}">
+                                    <f:setPropertyActionListener target="#{courseBean.selectedCourseId}"
+                                                                 value="#{course.id}"/>
+                                </h:commandButton>
+                            </h:form>
+                        </c:if>
                     </c:if>
                     <h:link value="Ver detalle" outcome="/views/course-detail" styleClass="btn btn-secondary btn-sm">
                         <f:param name="courseId" value="#{course.id}"/>
                     </h:link>
+                    <!-- Instructor: Edit and Delete -->
+                    <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                        <h:link value="Editar" outcome="/views/course-edit" styleClass="btn btn-secondary btn-sm">
+                            <f:param name="courseId" value="#{course.id}"/>
+                        </h:link>
+                    </h:panelGroup>
+                    <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                        <h:form style="display:inline;">
+                            <h:commandButton value="Eliminar" styleClass="btn btn-secondary btn-sm"
+                                             style="color:#c0392b;border-color:#c0392b;"
+                                             action="#{editBean.deleteCourse(course.id)}"
+                                             onclick="return confirm('¿Eliminar este curso y todo su contenido? Esta acción no se puede deshacer.')"/>
+                        </h:form>
+                    </h:panelGroup>
                 </div>
             </div>
         </ui:repeat>

@@ -7,6 +7,7 @@ COPY services/collaboration-service/pom.xml services/collaboration-service/pom.x
 COPY services/user-service/pom.xml       services/user-service/pom.xml
 COPY services/course-service/pom.xml     services/course-service/pom.xml
 COPY services/assessment-service/pom.xml services/assessment-service/pom.xml
+COPY services/email-service/pom.xml     services/email-service/pom.xml
 COPY frontend/web-ui/pom.xml   frontend/web-ui/pom.xml
 RUN mvn dependency:go-offline -pl libs/security,libs/events,services/collaboration-service -am -q
 COPY libs/security/src     libs/security/src
@@ -21,8 +22,17 @@ COPY --from=builder /root/.m2/repository/org/postgresql/postgresql/42.7.3/postgr
     /opt/jboss/wildfly/modules/org/postgresql/main/postgresql.jar
 COPY infra/wildfly/postgresql-module.xml \
     /opt/jboss/wildfly/modules/org/postgresql/main/module.xml
+COPY services/collaboration-service/src/main/resources/jboss-cli-datasource.cli \
+    /opt/jboss/wildfly/configure-ds.cli
+RUN /opt/jboss/wildfly/bin/add-user.sh admin admin_secret --silent && \
+    /opt/jboss/wildfly/bin/standalone.sh --admin-only & \
+    sleep 20 && \
+    /opt/jboss/wildfly/bin/jboss-cli.sh --connect --file=/opt/jboss/wildfly/configure-ds.cli ; \
+    /opt/jboss/wildfly/bin/jboss-cli.sh --connect command=:shutdown ; \
+    wait
 COPY --from=builder /build/services/collaboration-service/target/collaboration-service.war \
     /opt/jboss/wildfly/standalone/deployments/ROOT.war
+RUN chown -R jboss:jboss /opt/jboss/wildfly/standalone
 USER jboss
 EXPOSE 8080
 CMD ["/opt/jboss/wildfly/bin/standalone.sh", "-b", "0.0.0.0"]

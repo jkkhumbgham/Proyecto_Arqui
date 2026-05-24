@@ -50,6 +50,9 @@ public class Course {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "category", length = 100)
+    private String category;
+
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
@@ -73,6 +76,7 @@ public class Course {
     public UUID         getInstructorId() { return instructorId; }
     public CourseStatus getStatus()       { return status; }
     public String       getCoverImageUrl(){ return coverImageUrl; }
+    public String       getCategory()     { return category; }
     public Integer      getMaxStudents()  { return maxStudents; }
     public List<Module> getModules()      { return modules; }
     public Instant      getCreatedAt()    { return createdAt; }
@@ -84,5 +88,6 @@ public class Course {
     public void setInstructorId(UUID instructorId)   { this.instructorId = instructorId; }
     public void setStatus(CourseStatus status)        { this.status = status; }
     public void setCoverImageUrl(String url)         { this.coverImageUrl = url; }
+    public void setCategory(String category)         { this.category = category; }
     public void setMaxStudents(Integer maxStudents)  { this.maxStudents = maxStudents; }
 }

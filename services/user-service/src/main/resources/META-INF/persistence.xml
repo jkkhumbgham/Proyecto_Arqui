@@ -11,6 +11,10 @@
         <class>com.puj.users.entity.User</class>
         <class>com.puj.users.entity.RefreshToken</class>
         <class>com.puj.users.entity.AuditLog</class>
+        <class>com.puj.users.entity.UserPoints</class>
+        <class>com.puj.users.entity.PointEvent</class>
+        <class>com.puj.users.entity.UserBadge</class>
+        <class>com.puj.users.entity.GamificationRule</class>
 
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
 

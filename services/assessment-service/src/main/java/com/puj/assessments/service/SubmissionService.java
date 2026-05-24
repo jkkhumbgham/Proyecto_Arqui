@@ -31,6 +31,46 @@ public class SubmissionService {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /** Grades an already-persisted IN_PROGRESS submission without creating a new one. */
+    @Transactional
+    public SubmissionResult gradeExisting(Submission submission, SubmitRequest req) {
+        Assessment assessment = submission.getAssessment();
+
+        try {
+            submission.setAnswersJson(mapper.writeValueAsString(req.answers()));
+        } catch (Exception e) {
+            submission.setAnswersJson("{}");
+        }
+
+        GradeResult grade = grade(assessment, req.answers());
+        submission.setScore(grade.score());
+        submission.setMaxScore(grade.maxScore());
+        submission.setPassed(grade.passed());
+        submission.setStatus(SubmissionStatus.GRADED);
+        submission.setSubmittedAt(Instant.now());
+        submission.setDurationSeconds(req.durationSeconds());
+        submission.setGradedAt(Instant.now());
+        submissionRepo.save(submission);
+
+        boolean allPassed = computeAllAssessmentsPassed(submission.getUserId(), assessment.getCourseId());
+        AssessmentSubmittedEvent event = new AssessmentSubmittedEvent(
+                submission.getId().toString(), submission.getUserId().toString(),
+                assessment.getId().toString(), assessment.getCourseId().toString(),
+                assessment.getLessonId() != null ? assessment.getLessonId().toString() : null,
+                grade.score(), grade.maxScore(), grade.passed(), req.durationSeconds(), allPassed
+        );
+        eventPublisher.publishAnalytics(event);
+
+        Optional<AdaptiveRecommendation> recommendation =
+                adaptiveEngine.evaluate(assessment.getId(), submission.getUserId(),
+                        grade.score(), grade.maxScore());
+
+        return new SubmissionResult(
+                submission.getId(), grade.score(), grade.maxScore(),
+                grade.passed(), grade.scorePct(), recommendation.orElse(null)
+        );
+    }
+
     @Transactional
     public SubmissionResult submit(UUID userId, UUID assessmentId, SubmitRequest req) {
         Assessment assessment = assessmentRepo.findById(assessmentId)
@@ -63,11 +103,12 @@ public class SubmissionService {
         submission.setGradedAt(Instant.now());
         submissionRepo.save(submission);
 
+        boolean allPassed = computeAllAssessmentsPassed(userId, assessment.getCourseId());
         AssessmentSubmittedEvent event = new AssessmentSubmittedEvent(
                 submission.getId().toString(), userId.toString(),
                 assessmentId.toString(), assessment.getCourseId().toString(),
                 assessment.getLessonId() != null ? assessment.getLessonId().toString() : null,
-                grade.score(), grade.maxScore(), grade.passed(), req.durationSeconds()
+                grade.score(), grade.maxScore(), grade.passed(), req.durationSeconds(), allPassed
         );
         eventPublisher.publishAnalytics(event);
 
@@ -113,6 +154,16 @@ public class SubmissionService {
         boolean passed     = scorePct >= assessment.getPassingScorePct();
 
         return new GradeResult(score, maxScore, scorePct, passed);
+    }
+
+    private boolean computeAllAssessmentsPassed(UUID userId, UUID courseId) {
+        List<Assessment> courseAssessments = assessmentRepo.findByCourse(courseId);
+        if (courseAssessments.isEmpty()) return false;
+        List<UUID> assessmentIds = courseAssessments.stream().map(Assessment::getId).toList();
+        List<Submission> userSubmissions = submissionRepo.findByUserAndAssessments(userId, assessmentIds);
+        return courseAssessments.stream().allMatch(a ->
+            userSubmissions.stream().anyMatch(s ->
+                s.getAssessment().getId().equals(a.getId()) && s.isPassed()));
     }
 
     private record GradeResult(BigDecimal score, BigDecimal maxScore, double scorePct, boolean passed) {}

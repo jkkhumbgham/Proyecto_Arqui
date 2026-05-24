@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">#{lessonViewerBean.title}</ui:define>
+<ui:define name="content">
+
+<h:panelGroup rendered="#{!lessonViewerBean.loaded}">
+    <div class="card" style="text-align:center;color:#888;padding:3rem;">
+        <p style="font-size:1.1rem;">No se pudo cargar la lección.</p>
+        <h:link value="← Volver al curso" outcome="/views/courses" styleClass="btn btn-primary"
+                style="margin-top:1rem;display:inline-block;"/>
+    </div>
+</h:panelGroup>
+
+<h:panelGroup rendered="#{lessonViewerBean.loaded}">
+
+    <!-- Top bar: back + progress -->
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                margin-bottom:1.5rem;flex-wrap:wrap;gap:.75rem;">
+        <h:link outcome="/views/course-detail" styleClass="btn btn-secondary btn-sm"
+                value="← Volver al curso">
+            <f:param name="courseId" value="#{lessonViewerBean.courseId}"/>
+        </h:link>
+
+        <h:panelGroup rendered="#{lessonViewerBean.student and lessonViewerBean.totalLessons gt 0}">
+            <div style="display:flex;align-items:center;gap:.75rem;">
+                <span style="font-size:.85rem;color:#666;">
+                    #{lessonViewerBean.completedCount} / #{lessonViewerBean.totalLessons} completadas
+                </span>
+                <div style="width:140px;background:#e2e8f0;border-radius:999px;height:8px;">
+                    <div style="width:#{lessonViewerBean.progressPct}%;background:#2ecc71;
+                                border-radius:999px;height:8px;transition:width .3s;"/>
+                </div>
+                <strong style="font-size:.85rem;color:#2ecc71;">#{lessonViewerBean.progressPct}%</strong>
+            </div>
+        </h:panelGroup>
+    </div>
+
+    <div style="display:flex;gap:1.5rem;align-items:flex-start;">
+
+        <!-- ── SIDEBAR: módulo + lecciones del módulo ──────────────────── -->
+        <div style="width:270px;flex-shrink:0;background:#fff;border:1px solid #e0e6f0;
+                    border-radius:10px;overflow:hidden;position:sticky;top:1rem;
+                    max-height:calc(100vh - 120px);display:flex;flex-direction:column;">
+
+            <!-- Module header -->
+            <div style="padding:.85rem 1rem;background:#1a3a6b;color:#fff;">
+                <div style="font-size:.7rem;opacity:.65;text-transform:uppercase;
+                            letter-spacing:.06em;margin-bottom:.2rem;">Módulo</div>
+                <div style="font-size:.9rem;font-weight:600;line-height:1.3;
+                            word-break:break-word;">
+                    #{lessonViewerBean.moduleTitle != null ? lessonViewerBean.moduleTitle : 'Módulo'}
+                </div>
+            </div>
+
+            <!-- Lesson list with circles -->
+            <div style="overflow-y:auto;flex:1;padding:.5rem 0;">
+                <ui:repeat value="#{lessonViewerBean.moduleNavLessons}" var="nav">
+                    <!-- Lesson row -->
+                    <div style="display:flex;align-items:center;gap:.5rem;padding:.1rem .75rem .1rem .6rem;
+                                background:#{nav.id == lessonViewerBean.lessonId ? '#eef2ff' : 'transparent'};
+                                border-left:3px solid #{nav.id == lessonViewerBean.lessonId ? '#1a3a6b' : 'transparent'};
+                                transition:background .15s;">
+
+                        <!-- Case 1: completed -->
+                        <h:panelGroup rendered="#{nav.completed}">
+                            <span style="width:22px;height:22px;border-radius:50%;
+                                         background:#2ecc71;flex-shrink:0;
+                                         display:inline-flex;align-items:center;
+                                         justify-content:center;font-size:.65rem;
+                                         color:#fff;font-weight:700;">✓</span>
+                        </h:panelGroup>
+
+                        <!-- Case 2: current lesson, not completed, student → clickable circle -->
+                        <h:panelGroup rendered="#{not nav.completed and nav.id == lessonViewerBean.lessonId and lessonViewerBean.student}">
+                            <h:link outcome="/views/lesson-viewer" title="Marcar lección como completada"
+                                    style="width:22px;height:22px;border-radius:50%;
+                                           background:transparent;border:2px solid #1a3a6b;
+                                           cursor:pointer;flex-shrink:0;display:inline-flex;
+                                           align-items:center;justify-content:center;padding:0;
+                                           text-decoration:none;transition:background .2s, border-color .2s;">
+                                <f:param name="lessonId" value="#{lessonViewerBean.lessonId}"/>
+                                <f:param name="courseId" value="#{lessonViewerBean.courseId}"/>
+                                <f:param name="complete" value="1"/>
+                            </h:link>
+                        </h:panelGroup>
+
+                        <!-- Case 3: other lesson, not completed → static empty circle -->
+                        <h:panelGroup rendered="#{not nav.completed and nav.id != lessonViewerBean.lessonId}">
+                            <span style="width:22px;height:22px;border-radius:50%;
+                                         border:2px solid #ccc;flex-shrink:0;
+                                         display:inline-block;"/>
+                        </h:panelGroup>
+
+                        <!-- Case 4: current lesson, not completed, non-student → static circle -->
+                        <h:panelGroup rendered="#{not nav.completed and nav.id == lessonViewerBean.lessonId and not lessonViewerBean.student}">
+                            <span style="width:22px;height:22px;border-radius:50%;
+                                         border:2px solid #1a3a6b;flex-shrink:0;
+                                         display:inline-block;"/>
+                        </h:panelGroup>
+
+                        <!-- Lesson title link -->
+                        <h:link outcome="/views/lesson-viewer"
+                                style="flex:1;text-decoration:none;font-size:.83rem;padding:.45rem 0;
+                                       color:#{nav.id == lessonViewerBean.lessonId ? '#1a3a6b' : '#444'};
+                                       font-weight:#{nav.id == lessonViewerBean.lessonId ? '600' : 'normal'};
+                                       line-height:1.35;word-break:break-word;">
+                            <f:param name="lessonId" value="#{nav.id}"/>
+                            <f:param name="courseId" value="#{lessonViewerBean.courseId}"/>
+                            #{nav.title}
+                        </h:link>
+                    </div>
+
+                    <!-- Assessment row: shown below the lesson it belongs to, after a separator -->
+                    <h:panelGroup rendered="#{not empty nav.assessmentId}">
+                        <div style="border-top:1px solid #e8ecf4;margin:0 .6rem;padding:.3rem 0 .3rem .75rem;">
+                            <div style="display:flex;align-items:center;gap:.45rem;">
+                                <span style="width:18px;height:18px;border-radius:3px;background:#e8f0fe;
+                                             flex-shrink:0;display:inline-flex;align-items:center;
+                                             justify-content:center;font-size:.62rem;">📝</span>
+                                <h:link outcome="/views/assessment-take"
+                                        style="flex:1;text-decoration:none;font-size:.79rem;padding:.3rem 0;
+                                               color:#2a52a0;font-weight:500;line-height:1.3;word-break:break-word;">
+                                    <f:param name="assessmentId" value="#{nav.assessmentId}"/>
+                                    <f:param name="courseId"     value="#{lessonViewerBean.courseId}"/>
+                                    #{nav.assessmentTitle}
+                                </h:link>
+                            </div>
+                        </div>
+                    </h:panelGroup>
+                </ui:repeat>
+
+                <h:panelGroup rendered="#{empty lessonViewerBean.moduleNavLessons}">
+                    <p style="font-size:.8rem;color:#aaa;padding:.75rem 1rem;">Sin lecciones en este módulo.</p>
+                </h:panelGroup>
+            </div>
+        </div>
+
+        <!-- ── MAIN CONTENT ─────────────────────────────────────────────── -->
+        <div style="flex:1;min-width:0;">
+
+            <!-- Lesson header -->
+            <div style="margin-bottom:1.25rem;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;
+                            gap:1rem;flex-wrap:wrap;">
+                    <h1 style="font-size:1.5rem;color:#1a3a6b;margin:0;line-height:1.3;">
+                        #{lessonViewerBean.title}
+                    </h1>
+                    <h:panelGroup rendered="#{lessonViewerBean.alreadyCompleted}">
+                        <span style="display:inline-flex;align-items:center;gap:.4rem;
+                                     background:#d4edda;color:#155724;border-radius:999px;
+                                     padding:.3rem .8rem;font-size:.82rem;font-weight:600;white-space:nowrap;">
+                            ✓ Completada
+                        </span>
+                    </h:panelGroup>
+                </div>
+                <h:panelGroup rendered="#{lessonViewerBean.durationMinutes != null}">
+                    <span style="font-size:.82rem;color:#888;margin-top:.3rem;display:inline-block;">
+                        ⏱ #{lessonViewerBean.durationMinutes} min
+                    </span>
+                </h:panelGroup>
+            </div>
+
+            <!-- ══ Content item tabs (when multi-content exists) ══ -->
+            <h:panelGroup rendered="#{not empty lessonViewerBean.lessonContents}">
+                <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;">
+                    <ui:repeat value="#{lessonViewerBean.lessonContents}" var="lc" varStatus="st">
+                        <h:link outcome="/views/lesson-viewer"
+                                style="display:inline-flex;align-items:center;gap:.35rem;
+                                       padding:.4rem .85rem;border-radius:999px;font-size:.83rem;
+                                       text-decoration:none;border:1.5px solid;
+                                       background:#{lc.id == (lessonViewerBean.selectedContent != null ? lessonViewerBean.selectedContent.id : '') ? '#1a3a6b' : '#fff'};
+                                       color:#{lc.id == (lessonViewerBean.selectedContent != null ? lessonViewerBean.selectedContent.id : '') ? '#fff' : '#1a3a6b'};
+                                       border-color:#{lc.id == (lessonViewerBean.selectedContent != null ? lessonViewerBean.selectedContent.id : '') ? '#1a3a6b' : '#c8d6e8'};
+                                       font-weight:#{lc.id == (lessonViewerBean.selectedContent != null ? lessonViewerBean.selectedContent.id : '') ? '600' : 'normal'};
+                                       transition:all .15s;">
+                            <f:param name="lessonId"  value="#{lessonViewerBean.lessonId}"/>
+                            <f:param name="courseId"  value="#{lessonViewerBean.courseId}"/>
+                            <f:param name="contentId" value="#{lc.id}"/>
+                            <h:panelGroup rendered="#{lc.contentType == 'VIDEO'}">🎥</h:panelGroup>
+                            <h:panelGroup rendered="#{lc.contentType == 'PDF'}">📄</h:panelGroup>
+                            <h:panelGroup rendered="#{lc.contentType == 'DOCUMENT'}">📋</h:panelGroup>
+                            <h:panelGroup rendered="#{lc.contentType == 'TEXT' or lc.contentType == null}">📝</h:panelGroup>
+                            #{lc.title}
+                        </h:link>
+                    </ui:repeat>
+                </div>
+            </h:panelGroup>
+
+            <!-- ══ Content card ══ -->
+            <div class="card" style="margin-bottom:1.5rem;padding:2rem;">
+
+                <!-- ── Multi-content mode ── -->
+                <h:panelGroup rendered="#{not empty lessonViewerBean.lessonContents and lessonViewerBean.selectedContent != null}">
+                    <h:panelGroup rendered="#{not empty lessonViewerBean.selectedContent.description}">
+                        <p style="color:#555;font-size:.95rem;margin-bottom:1.5rem;line-height:1.7;
+                                  white-space:pre-wrap;">#{lessonViewerBean.selectedContent.description}</p>
+                    </h:panelGroup>
+
+                    <!-- VIDEO -->
+                    <h:panelGroup rendered="#{lessonViewerBean.selectedContent.contentType == 'VIDEO' and lessonViewerBean.selectedContent.contentUrl != null}">
+                        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;
+                                    border-radius:8px;background:#000;">
+                            <iframe src="#{lessonViewerBean.selectedEmbedUrl}"
+                                    style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
+                                    allowfullscreen="true"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"/>
+                        </div>
+                    </h:panelGroup>
+
+                    <!-- PDF -->
+                    <h:panelGroup rendered="#{lessonViewerBean.selectedContent.contentType == 'PDF' and lessonViewerBean.selectedContent.contentUrl != null}">
+                        <iframe src="#{lessonViewerBean.selectedContent.contentUrl}"
+                                style="width:100%;height:700px;border:1px solid #e0e6f0;border-radius:8px;"/>
+                        <div style="text-align:right;margin-top:.5rem;">
+                            <a href="#{lessonViewerBean.selectedContent.contentUrl}" target="_blank"
+                               style="font-size:.85rem;color:#1a3a6b;text-decoration:underline;">
+                                Abrir en nueva pestaña ↗
+                            </a>
+                        </div>
+                    </h:panelGroup>
+
+                    <!-- DOCUMENT -->
+                    <h:panelGroup rendered="#{lessonViewerBean.selectedContent.contentType == 'DOCUMENT' and lessonViewerBean.selectedContent.contentUrl != null}">
+                        <div style="display:flex;align-items:center;gap:1rem;padding:1.5rem;
+                                    background:#f0f4ff;border-radius:10px;">
+                            <span style="font-size:2.5rem;flex-shrink:0;">📋</span>
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-weight:600;color:#1a3a6b;margin-bottom:.35rem;">Documento adjunto</div>
+                                <a href="#{lessonViewerBean.selectedContent.contentUrl}" target="_blank"
+                                   style="font-size:.85rem;color:#2980b9;word-break:break-all;">
+                                    #{lessonViewerBean.selectedContent.contentUrl}
+                                </a>
+                            </div>
+                            <a href="#{lessonViewerBean.selectedContent.contentUrl}" target="_blank"
+                               class="btn btn-primary btn-sm" style="flex-shrink:0;">
+                                Descargar / Ver
+                            </a>
+                        </div>
+                    </h:panelGroup>
+
+                    <!-- TEXT (description already shown above) -->
+                    <h:panelGroup rendered="#{(lessonViewerBean.selectedContent.contentType == 'TEXT' or lessonViewerBean.selectedContent.contentType == null) and empty lessonViewerBean.selectedContent.description}">
+                        <div style="color:#aaa;text-align:center;padding:3rem 0;">
+                            <p>Este contenido no tiene texto.</p>
+                        </div>
+                    </h:panelGroup>
+                </h:panelGroup>
+
+                <!-- No contents yet -->
+                <h:panelGroup rendered="#{empty lessonViewerBean.lessonContents}">
+                    <div style="color:#aaa;text-align:center;padding:3rem 0;">
+                        <p style="font-size:1.1rem;">Esta lección aún no tiene contenidos.</p>
+                        <p style="font-size:.875rem;">Agrega contenidos desde el panel del instructor.</p>
+                    </div>
+                </h:panelGroup>
+
+            </div>
+
+            <!-- Assessment card (only when this lesson is the one linked to the assessment) -->
+            <h:panelGroup rendered="#{lessonViewerBean.moduleAssessment != null
+                                      and lessonViewerBean.moduleAssessment.linkedLessonId == lessonViewerBean.lessonId}">
+                <div class="card" style="margin-bottom:1.5rem;border-left:4px solid #1a3a6b;padding:1.5rem 2rem;">
+                    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;">
+                        <span style="font-size:1.5rem;">📝</span>
+                        <div>
+                            <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;
+                                        color:#888;margin-bottom:.15rem;">Evaluación del módulo</div>
+                            <h2 style="margin:0;font-size:1.15rem;color:#1a3a6b;">
+                                #{lessonViewerBean.moduleAssessment.title}
+                            </h2>
+                        </div>
+                    </div>
+
+                    <h:panelGroup rendered="#{not empty lessonViewerBean.moduleAssessment.description}">
+                        <p style="color:#444;line-height:1.7;margin-bottom:1.25rem;
+                                  white-space:pre-wrap;font-size:.95rem;">
+                            #{lessonViewerBean.moduleAssessment.description}
+                        </p>
+                    </h:panelGroup>
+
+                    <div style="display:flex;flex-wrap:wrap;gap:1.5rem;margin-bottom:1.25rem;
+                                background:#f7f9fc;border-radius:8px;padding:1rem 1.25rem;">
+                        <div>
+                            <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:#888;">Preguntas</div>
+                            <div style="font-weight:700;color:#1a3a6b;font-size:1.1rem;">
+                                #{lessonViewerBean.moduleAssessment.questionCount}
+                            </div>
+                        </div>
+                        <div>
+                            <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:#888;">Nota mínima</div>
+                            <div style="font-weight:700;color:#1a3a6b;font-size:1.1rem;">
+                                #{lessonViewerBean.moduleAssessment.passingScorePct}%
+                            </div>
+                        </div>
+                        <div>
+                            <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:#888;">Intentos</div>
+                            <div style="font-weight:700;color:#1a3a6b;font-size:1.1rem;">
+                                #{lessonViewerBean.moduleAssessment.maxAttempts}
+                            </div>
+                        </div>
+                        <h:panelGroup rendered="#{lessonViewerBean.moduleAssessment.timeLimitMinutes != null}">
+                            <div>
+                                <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:#888;">Tiempo</div>
+                                <div style="font-weight:700;color:#1a3a6b;font-size:1.1rem;">
+                                    #{lessonViewerBean.moduleAssessment.timeLimitMinutes} min
+                                </div>
+                            </div>
+                        </h:panelGroup>
+                    </div>
+
+                    <h:link outcome="/views/assessment-take" styleClass="btn btn-primary"
+                            style="display:inline-block;text-decoration:none;">
+                        <f:param name="assessmentId" value="#{lessonViewerBean.moduleAssessment.id}"/>
+                        <f:param name="courseId"     value="#{lessonViewerBean.courseId}"/>
+                        Ir a la evaluación →
+                    </h:link>
+                </div>
+            </h:panelGroup>
+
+            <!-- Mark complete + bottom navigation -->
+            <div style="display:flex;justify-content:space-between;align-items:center;
+                        flex-wrap:wrap;gap:1rem;">
+
+                <h:panelGroup rendered="#{lessonViewerBean.prevLessonId != null}">
+                    <h:link outcome="/views/lesson-viewer" styleClass="btn btn-secondary"
+                            value="← Anterior">
+                        <f:param name="lessonId" value="#{lessonViewerBean.prevLessonId}"/>
+                        <f:param name="courseId" value="#{lessonViewerBean.courseId}"/>
+                    </h:link>
+                </h:panelGroup>
+                <h:panelGroup rendered="#{lessonViewerBean.prevLessonId == null}"><div/></h:panelGroup>
+
+                <!-- Mark complete button (student, not yet completed) -->
+                <h:panelGroup rendered="#{lessonViewerBean.student and not lessonViewerBean.alreadyCompleted}">
+                    <h:link outcome="/views/lesson-viewer"
+                            styleClass="btn btn-primary"
+                            style="background:#27ae60;border-color:#27ae60;display:inline-block;text-decoration:none;">
+                        <f:param name="lessonId" value="#{lessonViewerBean.lessonId}"/>
+                        <f:param name="courseId" value="#{lessonViewerBean.courseId}"/>
+                        <f:param name="complete" value="1"/>
+                        ✓ Marcar como completada
+                    </h:link>
+                </h:panelGroup>
+
+                <h:panelGroup rendered="#{lessonViewerBean.nextLessonId != null and (not lessonViewerBean.student or lessonViewerBean.alreadyCompleted)}">
+                    <h:link outcome="/views/lesson-viewer" styleClass="btn btn-primary"
+                            value="Siguiente →">
+                        <f:param name="lessonId" value="#{lessonViewerBean.nextLessonId}"/>
+                        <f:param name="courseId" value="#{lessonViewerBean.courseId}"/>
+                    </h:link>
+                </h:panelGroup>
+                <h:panelGroup rendered="#{lessonViewerBean.nextLessonId == null and (not lessonViewerBean.student or lessonViewerBean.alreadyCompleted)}">
+                    <h:link value="Ver curso completo →" outcome="/views/course-detail"
+                            styleClass="btn btn-secondary">
+                        <f:param name="courseId" value="#{lessonViewerBean.courseId}"/>
+                    </h:link>
+                </h:panelGroup>
+            </div>
+
+        </div><!-- end main -->
+    </div>
+</h:panelGroup>
+
+</ui:define>
+</ui:composition>
+</html>

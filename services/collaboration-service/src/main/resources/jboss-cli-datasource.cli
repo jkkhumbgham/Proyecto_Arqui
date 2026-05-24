@@ -1,0 +1,20 @@
+#!/usr/bin/env jboss-cli.sh
+
+if (outcome != success) of /subsystem=datasources/jdbc-driver=postgresql:read-resource
+    /subsystem=datasources/jdbc-driver=postgresql:add(driver-name=postgresql, driver-module-name=org.postgresql)
+end-if
+
+if (outcome != success) of /subsystem=datasources/data-source=CollaborationServiceDS:read-resource
+    data-source add \
+        --name=CollaborationServiceDS \
+        --driver-name=postgresql \
+        --jndi-name=java:jboss/datasources/CollaborationServiceDS \
+        --connection-url=${env.DB_URL} \
+        --user-name=${env.DB_USER} \
+        --password=${env.DB_PASSWORD} \
+        --min-pool-size=5 \
+        --max-pool-size=20 \
+        --pool-prefill=true \
+        --valid-connection-checker-class-name=org.jboss.jca.adapters.jdbc.extensions.postgres.PostgreSQLValidConnectionChecker \
+        --exception-sorter-class-name=org.jboss.jca.adapters.jdbc.extensions.postgres.PostgreSQLExceptionSorter
+end-if

@@ -7,6 +7,8 @@
         <class>com.puj.collaboration.entity.Post</class>
         <class>com.puj.collaboration.entity.StudyGroup</class>
         <class>com.puj.collaboration.entity.GroupMember</class>
+        <class>com.puj.collaboration.entity.ChatMessage</class>
+        <class>com.puj.collaboration.entity.Notification</class>
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
         <properties>
             <property name="jakarta.persistence.schema-generation.database.action" value="update"/>

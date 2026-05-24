@@ -8,6 +8,7 @@ COPY services/user-service/pom.xml       services/user-service/pom.xml
 COPY services/course-service/pom.xml     services/course-service/pom.xml
 COPY services/assessment-service/pom.xml services/assessment-service/pom.xml
 COPY services/collaboration-service/pom.xml services/collaboration-service/pom.xml
+COPY services/email-service/pom.xml       services/email-service/pom.xml
 RUN mvn dependency:go-offline -pl libs/security,frontend/web-ui -am -q
 COPY libs/security/src libs/security/src
 COPY frontend/web-ui/src frontend/web-ui/src

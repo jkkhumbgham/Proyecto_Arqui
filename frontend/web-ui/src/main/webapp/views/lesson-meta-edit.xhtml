@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Editar lección</ui:define>
+<ui:define name="content">
+
+    <f:event type="preRenderView" listener="#{editBean.load}"/>
+
+    <h:link value="← Volver al curso" outcome="/views/course-detail"
+            styleClass="btn btn-secondary btn-sm"
+            style="margin-bottom:1rem;display:inline-block;">
+        <f:param name="courseId" value="#{editBean.courseId}"/>
+    </h:link>
+
+    <h2 class="page-title">Editar lección</h2>
+
+    <h:messages globalOnly="true" styleClass="alert alert-warn" style="margin-bottom:1rem;"/>
+
+    <div class="card" style="max-width:500px;">
+        <h:form>
+            <h:inputHidden value="#{editBean.courseId}"/>
+            <h:inputHidden value="#{editBean.lessonId}"/>
+
+            <div class="form-group">
+                <label class="form-label">Título *</label>
+                <h:inputText value="#{editBean.lessonTitle}" styleClass="form-control" style="width:100%;"/>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Duración estimada (minutos)</label>
+                <h:inputText value="#{editBean.lessonDuration}" styleClass="form-control" style="width:120px;"
+                             placeholder="15"/>
+            </div>
+
+            <div style="display:flex;gap:1rem;margin-top:1.25rem;">
+                <h:link value="Cancelar" outcome="/views/course-detail" styleClass="btn btn-secondary">
+                    <f:param name="courseId" value="#{editBean.courseId}"/>
+                </h:link>
+                <h:link value="Editar contenidos" outcome="/views/lesson-edit"
+                        styleClass="btn btn-secondary">
+                    <f:param name="lessonId" value="#{editBean.lessonId}"/>
+                    <f:param name="courseId" value="#{editBean.courseId}"/>
+                </h:link>
+                <h:commandButton value="Guardar cambios" action="#{editBean.updateLesson}"
+                                 styleClass="btn btn-primary"
+                                 onclick="return confirm('¿Guardar los cambios en la lección?')"/>
+            </div>
+        </h:form>
+    </div>
+
+</ui:define>
+</ui:composition>
+</html>

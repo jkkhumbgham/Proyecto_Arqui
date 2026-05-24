@@ -22,11 +22,16 @@ public class KeyProvider {
         String privatePem = System.getenv("JWT_PRIVATE_KEY");
         String publicPem  = System.getenv("JWT_PUBLIC_KEY");
 
-        if (privatePem != null && !privatePem.isBlank()
-                && publicPem != null && !publicPem.isBlank()) {
+        boolean hasPublic  = publicPem  != null && !publicPem.isBlank();
+        boolean hasPrivate = privatePem != null && !privatePem.isBlank();
+
+        if (hasPublic && hasPrivate) {
             this.privateKey = parsePrivateKey(privatePem);
             this.publicKey  = parsePublicKey(publicPem);
-            LOG.info("JWT RS256 keys loaded from environment variables.");
+            LOG.info("JWT RS256 keys loaded from environment variables (sign + verify).");
+        } else if (hasPublic) {
+            this.publicKey = parsePublicKey(publicPem);
+            LOG.info("JWT RS256 public key loaded from environment variables (verify only).");
         } else {
             LOG.warning("JWT_PRIVATE_KEY / JWT_PUBLIC_KEY not set — generating ephemeral RSA-2048 key pair (DEV ONLY).");
             generateEphemeralKeyPair();
@@ -64,7 +69,10 @@ public class KeyProvider {
     }
 
     private String stripPemHeaders(String pem) {
-        return pem.replaceAll("-----[A-Z ]+-----", "").replaceAll("\\s", "");
+        // Docker Compose pasa \n como dos caracteres literales barra+n; los convertimos primero
+        return pem.replace("\\n", "\n")
+                  .replaceAll("-----[A-Z ]+-----", "")
+                  .replaceAll("\\s", "");
     }
 
     public PrivateKey getPrivateKey() { return privateKey; }

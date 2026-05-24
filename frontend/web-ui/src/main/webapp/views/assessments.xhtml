@@ -7,30 +7,183 @@
 <ui:define name="pageTitle">Evaluaciones</ui:define>
 <ui:define name="content">
 
-    <h2 class="page-title">Evaluaciones</h2>
-
-    <div class="card-grid">
-        <ui:repeat value="#{assessmentBean.assessments}" var="a">
-            <div class="card">
-                <strong>#{a.title}</strong>
-                <p style="font-size:.85rem;color:#666;margin:.4rem 0;">
-                    Puntaje total: <strong>#{a.totalPoints}</strong> pts
-                </p>
-                <h:form>
-                    <h:commandButton value="Iniciar evaluación" action="#{assessmentBean.startSubmission}"
-                                     styleClass="btn btn-primary btn-sm" style="margin-top:.5rem;">
-                        <f:setPropertyActionListener target="#{assessmentBean.selectedAssessmentId}"
-                                                     value="#{a.id}"/>
-                    </h:commandButton>
-                </h:form>
-            </div>
-        </ui:repeat>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+        <h2 class="page-title" style="margin:0;">Evaluaciones</h2>
     </div>
 
-    <h:panelGroup rendered="#{empty assessmentBean.assessments}">
-        <div class="card" style="text-align:center;color:#888;">
-            No hay evaluaciones disponibles para tus cursos.
+    <!-- ====== INSTRUCTOR VIEW ====== -->
+    <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+
+        <!-- Quiz results panel (shown when resultsFor param is present) -->
+        <h:panelGroup rendered="#{assessmentBean.hasQuizResults()}">
+            <div class="card" style="margin-bottom:2rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                    <h3 style="margin:0;color:#1a3a6b;">Resultados: #{assessmentBean.quizResultsTitle}</h3>
+                    <h:link value="← Ver todas las evaluaciones" outcome="/views/assessments"
+                            styleClass="btn btn-secondary btn-sm"/>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:.9rem;">
+                    <thead>
+                        <tr style="background:#f0f4ff;">
+                            <th style="padding:.5rem .75rem;text-align:left;color:#1a3a6b;">Estudiante</th>
+                            <th style="padding:.5rem .75rem;text-align:center;color:#1a3a6b;">Puntaje</th>
+                            <th style="padding:.5rem .75rem;text-align:center;color:#1a3a6b;">%</th>
+                            <th style="padding:.5rem .75rem;text-align:center;color:#1a3a6b;">Resultado</th>
+                            <th style="padding:.5rem .75rem;text-align:center;color:#1a3a6b;">Intento</th>
+                            <th style="padding:.5rem .75rem;text-align:left;color:#1a3a6b;">Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <ui:repeat value="#{assessmentBean.quizResults}" var="r">
+                            <tr style="border-bottom:1px solid #e0e6f0;">
+                                <td style="padding:.5rem .75rem;">#{assessmentBean.resolveStudentName(r.userId)}</td>
+                                <td style="padding:.5rem .75rem;text-align:center;">#{r.score} / #{r.maxScore}</td>
+                                <td style="padding:.5rem .75rem;text-align:center;font-weight:bold;">#{r.scorePct}%</td>
+                                <td style="padding:.5rem .75rem;text-align:center;">
+                                    <h:panelGroup rendered="#{r.passed}">
+                                        <span class="badge badge-green">Aprobado</span>
+                                    </h:panelGroup>
+                                    <h:panelGroup rendered="#{!r.passed}">
+                                        <span class="badge" style="background:#fef2f2;color:#dc2626;">Reprobado</span>
+                                    </h:panelGroup>
+                                </td>
+                                <td style="padding:.5rem .75rem;text-align:center;">#{r.attempt}</td>
+                                <td style="padding:.5rem .75rem;font-size:.8rem;color:#666;">#{assessmentBean.formatDate(r.submittedAt)}</td>
+                            </tr>
+                        </ui:repeat>
+                    </tbody>
+                </table>
+                <h:panelGroup rendered="#{empty assessmentBean.quizResults}">
+                    <p style="color:#aaa;text-align:center;padding:1rem;">Aún no hay entregas.</p>
+                </h:panelGroup>
+            </div>
+        </h:panelGroup>
+
+        <!-- Instructor: course title header -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+            <h3 style="color:#1a3a6b;margin:0;">
+                <h:panelGroup rendered="#{not empty assessmentBean.filteredCourseId}">
+                    Evaluaciones del curso
+                </h:panelGroup>
+                <h:panelGroup rendered="#{empty assessmentBean.filteredCourseId}">
+                    Todas mis evaluaciones
+                </h:panelGroup>
+            </h3>
+            <h:panelGroup rendered="#{not empty assessmentBean.filteredCourseId}">
+                <h:link value="← Ver todas" outcome="/views/assessments"
+                        styleClass="btn btn-secondary btn-sm"/>
+            </h:panelGroup>
         </div>
+
+        <!-- Grouped by course -->
+        <h:panelGroup rendered="#{assessmentBean.hasGroups()}">
+            <ui:repeat value="#{assessmentBean.groups}" var="grp">
+                <div style="margin-bottom:2.5rem;">
+                    <!-- Course section header -->
+                    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;
+                                padding-bottom:.6rem;border-bottom:2px solid #e0e6f0;">
+                        <span style="width:10px;height:10px;border-radius:50%;background:#1a3a6b;
+                                     display:inline-block;flex-shrink:0;"/>
+                        <h3 style="margin:0;font-size:1.05rem;color:#1a3a6b;">#{grp.courseTitle}</h3>
+                    </div>
+                    <h:panelGroup rendered="#{not empty grp.assessments}">
+                        <div class="card-grid">
+                            <ui:repeat value="#{grp.assessments}" var="a">
+                                <div class="card">
+                                    <strong>#{a.title}</strong>
+                                    <h:panelGroup rendered="#{not empty a.description}">
+                                        <p style="font-size:.82rem;color:#666;margin:.4rem 0;">#{a.description}</p>
+                                    </h:panelGroup>
+                                    <p style="font-size:.85rem;color:#888;margin:.4rem 0;">
+                                        Total: <strong>#{a.totalPoints}</strong> pts
+                                    </p>
+                                    <div style="display:flex;gap:.5rem;margin-top:.75rem;flex-wrap:wrap;">
+                                        <h:link value="Ver resultados" outcome="/views/assessments"
+                                                styleClass="btn btn-primary btn-sm">
+                                            <f:param name="resultsFor" value="#{a.id}"/>
+                                        </h:link>
+                                    </div>
+                                </div>
+                            </ui:repeat>
+                        </div>
+                    </h:panelGroup>
+                    <h:panelGroup rendered="#{empty grp.assessments}">
+                        <p style="color:#aaa;font-size:.875rem;margin:.25rem 0 0 .5rem;">
+                            Sin evaluaciones creadas.
+                            <h:link value="Crear evaluación →" outcome="/views/assessment-builder"
+                                    styleClass="" style="color:#1a3a6b;text-decoration:underline;">
+                                <f:param name="courseId" value="#{grp.courseId}"/>
+                            </h:link>
+                        </p>
+                    </h:panelGroup>
+                </div>
+            </ui:repeat>
+        </h:panelGroup>
+
+        <h:panelGroup rendered="#{!assessmentBean.hasGroups()}">
+            <div class="card" style="text-align:center;color:#888;">
+                <p>Aún no has creado evaluaciones. Crea una desde el detalle de un curso.</p>
+                <h:link value="Ver mis cursos" outcome="/views/courses" styleClass="btn btn-primary btn-sm"
+                        style="margin-top:.5rem;display:inline-block;"/>
+            </div>
+        </h:panelGroup>
+
+    </h:panelGroup>
+
+    <!-- ====== STUDENT VIEW ====== -->
+    <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')}">
+
+        <h:panelGroup rendered="#{assessmentBean.hasGroups()}">
+            <ui:repeat value="#{assessmentBean.groups}" var="grp">
+                <div style="margin-bottom:2.5rem;">
+                    <!-- Course section header -->
+                    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;
+                                padding-bottom:.6rem;border-bottom:2px solid #e0e6f0;">
+                        <span style="width:10px;height:10px;border-radius:50%;background:#1a3a6b;
+                                     display:inline-block;flex-shrink:0;"/>
+                        <h3 style="margin:0;font-size:1.05rem;color:#1a3a6b;">#{grp.courseTitle}</h3>
+                    </div>
+                    <h:panelGroup rendered="#{not empty grp.assessments}">
+                        <div class="card-grid">
+                            <ui:repeat value="#{grp.assessments}" var="a">
+                                <div class="card">
+                                    <strong>#{a.title}</strong>
+                                    <h:panelGroup rendered="#{not empty a.description}">
+                                        <p style="font-size:.82rem;color:#666;margin:.4rem 0;">#{a.description}</p>
+                                    </h:panelGroup>
+                                    <p style="font-size:.85rem;color:#888;margin:.4rem 0;">
+                                        Puntaje total: <strong>#{a.totalPoints}</strong> pts
+                                    </p>
+                                    <h:form style="margin-top:.75rem;">
+                                        <h:commandButton value="Iniciar evaluación"
+                                                         action="#{assessmentBean.startSubmission}"
+                                                         styleClass="btn btn-primary btn-sm">
+                                            <f:setPropertyActionListener
+                                                    target="#{assessmentBean.selectedAssessmentId}"
+                                                    value="#{a.id}"/>
+                                        </h:commandButton>
+                                    </h:form>
+                                </div>
+                            </ui:repeat>
+                        </div>
+                    </h:panelGroup>
+                    <h:panelGroup rendered="#{empty grp.assessments}">
+                        <p style="color:#aaa;font-size:.875rem;margin:.25rem 0 0 .5rem;">
+                            No hay evaluaciones disponibles para este curso.
+                        </p>
+                    </h:panelGroup>
+                </div>
+            </ui:repeat>
+        </h:panelGroup>
+
+        <h:panelGroup rendered="#{!assessmentBean.hasGroups()}">
+            <div class="card" style="text-align:center;color:#888;">
+                <p>No hay evaluaciones disponibles para tus cursos inscritos.</p>
+                <h:link value="Ver cursos disponibles" outcome="/views/courses"
+                        styleClass="btn btn-primary btn-sm" style="margin-top:.5rem;display:inline-block;"/>
+            </div>
+        </h:panelGroup>
+
     </h:panelGroup>
 
 </ui:define>

@@ -6,38 +6,270 @@
 <ui:composition template="/WEB-INF/templates/authenticated.xhtml">
 <ui:define name="pageTitle">Detalle del curso</ui:define>
 <ui:define name="content">
-    <f:metadata>
-        <f:viewParam name="courseId" value="#{courseBean.selectedCourseId}"/>
-        <f:viewAction action="#{courseBean.loadDetail}"/>
-    </f:metadata>
 
     <h:link value="← Volver a cursos" outcome="/views/courses" styleClass="btn btn-secondary btn-sm"
             style="margin-bottom:1rem;display:inline-block;"/>
 
-    <h2 class="page-title">
-        #{courseBean.courseDetail['title']}
-        <span class="badge badge-green" style="font-size:.7rem;vertical-align:middle;">
-            #{courseBean.courseDetail['status']}
-        </span>
-    </h2>
+    <h:panelGroup rendered="#{courseBean.courseDetail == null}">
+        <div class="card" style="text-align:center;color:#888;">
+            <p>No se pudo cargar el curso. Verifica que el ID sea válido.</p>
+        </div>
+    </h:panelGroup>
 
-    <p style="color:#555;margin-bottom:1.5rem;">#{courseBean.courseDetail['description']}</p>
-
-    <div class="card">
-        <h3 style="margin-bottom:1rem;color:#1a3a6b;">Módulos</h3>
-        <ui:repeat value="#{courseBean.modules}" var="mod">
-            <div style="display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid #eee;">
-                <span style="background:#1a3a6b;color:#fff;border-radius:50%;width:28px;height:28px;
-                             display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;">
-                    #{mod.order}
+    <h:panelGroup rendered="#{courseBean.courseDetail != null}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;margin-bottom:.5rem;">
+            <h2 class="page-title" style="margin:0;">
+                #{courseBean.courseDetail.title}
+                <span class="badge badge-green" style="font-size:.7rem;vertical-align:middle;">
+                    #{courseBean.courseDetail.status}
                 </span>
-                <span>#{mod.title}</span>
+            </h2>
+
+            <!-- Instructor actions -->
+            <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                    <h:link value="+ Agregar módulo" outcome="/views/module-create"
+                            styleClass="btn btn-primary btn-sm">
+                        <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                    </h:link>
+                    <h:link value="Crear evaluación" outcome="/views/assessment-builder"
+                            styleClass="btn btn-secondary btn-sm">
+                        <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                    </h:link>
+                    <h:link value="Editar curso" outcome="/views/course-edit"
+                            styleClass="btn btn-secondary btn-sm">
+                        <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                    </h:link>
+                </div>
+            </h:panelGroup>
+        </div>
+
+        <p style="color:#555;margin-bottom:1rem;">#{courseBean.courseDetail.description}</p>
+
+        <!-- Student progress bar (only for enrolled students) -->
+        <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT') and courseBean.isEnrolled(courseBean.selectedCourseId)}">
+            <div class="card" style="margin-bottom:1.5rem;padding:1rem 1.25rem;">
+                <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:200px;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:.4rem;">
+                            <span style="font-size:.85rem;color:#555;font-weight:600;">Tu progreso</span>
+                            <span style="font-size:.85rem;color:#2ecc71;font-weight:600;">
+                                #{courseBean.progressPct}%
+                            </span>
+                        </div>
+                        <div style="background:#e2e8f0;border-radius:999px;height:8px;">
+                            <div style="width:#{courseBean.progressPct}%;background:#2ecc71;
+                                        border-radius:999px;height:8px;"/>
+                        </div>
+                        <div style="font-size:.78rem;color:#888;margin-top:.3rem;">
+                            #{courseBean.completedLessons} de #{courseBean.totalLessons} lecciones completadas
+                        </div>
+                    </div>
+                    <h:panelGroup rendered="#{courseBean.firstUncompletedLessonId != null}">
+                        <h:link value="Continuar →" outcome="/views/lesson-viewer"
+                                styleClass="btn btn-primary">
+                            <f:param name="lessonId" value="#{courseBean.firstUncompletedLessonId}"/>
+                            <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                        </h:link>
+                    </h:panelGroup>
+                </div>
             </div>
-        </ui:repeat>
-        <h:panelGroup rendered="#{empty courseBean.modules}">
-            <p style="color:#888;padding:.5rem 0;">Este curso aún no tiene módulos.</p>
         </h:panelGroup>
-    </div>
+
+        <div class="card">
+            <h3 style="margin-bottom:1rem;color:#1a3a6b;">Módulos y lecciones</h3>
+
+            <ui:repeat value="#{courseBean.modules}" var="courseModule">
+                <div style="margin-bottom:1.5rem;border:1px solid #e0e6f0;border-radius:8px;overflow:hidden;">
+                    <!-- Module header -->
+                    <div style="background:#1a3a6b;color:#fff;padding:.6rem 1rem;
+                                display:flex;align-items:center;gap:.75rem;">
+                        <span style="background:rgba(255,255,255,.25);border-radius:50%;
+                                     width:28px;height:28px;display:inline-flex;
+                                     align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;">
+                            #{courseModule.orderIndex}
+                        </span>
+                        <div style="flex:1;">
+                            <strong>#{courseModule.title}</strong>
+                            <div style="font-size:.8rem;opacity:.8;margin-top:.1rem;">#{courseModule.description}</div>
+                        </div>
+                        <!-- Instructor: module actions -->
+                        <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                            <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
+                                <h:link value="+ Lección" outcome="/views/lesson-create"
+                                        style="font-size:.78rem;background:rgba(255,255,255,.2);
+                                               padding:.2rem .5rem;border-radius:4px;color:#fff;
+                                               text-decoration:none;white-space:nowrap;">
+                                    <f:param name="moduleId" value="#{courseModule.id}"/>
+                                    <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                </h:link>
+                                <h:link value="+ Evaluación" outcome="/views/assessment-builder"
+                                        style="font-size:.78rem;background:rgba(255,255,255,.15);
+                                               padding:.2rem .5rem;border-radius:4px;color:#fff;
+                                               text-decoration:none;border:1px solid rgba(255,255,255,.4);
+                                               white-space:nowrap;">
+                                    <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                    <f:param name="moduleId" value="#{courseModule.id}"/>
+                                </h:link>
+                                <h:link value="✎" outcome="/views/module-edit" title="Editar módulo"
+                                        style="font-size:.78rem;background:rgba(255,255,255,.15);
+                                               padding:.2rem .45rem;border-radius:4px;color:#fff;
+                                               text-decoration:none;border:1px solid rgba(255,255,255,.3);">
+                                    <f:param name="moduleId" value="#{courseModule.id}"/>
+                                    <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                </h:link>
+                                <h:form style="display:inline;">
+                                    <h:commandButton value="✕" title="Eliminar módulo"
+                                                     style="font-size:.78rem;background:rgba(220,80,80,.25);
+                                                            padding:.2rem .45rem;border-radius:4px;color:#fff;
+                                                            border:1px solid rgba(255,150,150,.4);cursor:pointer;"
+                                                     action="#{editBean.deleteModule(courseModule.id, courseBean.selectedCourseId)}"
+                                                     onclick="return confirm('¿Eliminar este módulo y todas sus lecciones? Esta acción no se puede deshacer.')"/>
+                                </h:form>
+                            </div>
+                        </h:panelGroup>
+                    </div>
+
+                    <!-- Module locked indicator (STUDENT only) -->
+                    <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT') and courseBean.isModuleLocked(courseModule.id)}">
+                        <div style="padding:1.5rem;text-align:center;background:#fffbf0;border-top:1px solid #f0e6c0;">
+                            <p style="font-size:1rem;color:#888;margin:0;">
+                                🔒 Completa el módulo anterior para desbloquear este contenido.
+                            </p>
+                        </div>
+                    </h:panelGroup>
+
+                    <!-- Lessons list (unlocked, or instructor/admin view) -->
+                    <h:panelGroup rendered="#{not (sessionBean.hasRole('STUDENT') and courseBean.isModuleLocked(courseModule.id))}">
+                    <div style="padding:.5rem 1rem;">
+                        <ui:repeat value="#{courseModule.lessons}" var="lesson">
+                            <!-- Lesson row: hide supplementary unless unlocked by adaptive engine or instructor/admin -->
+                            <h:panelGroup rendered="#{not lesson.supplementary or sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN') or courseBean.isSupplementaryUnlocked(lesson.id)}">
+                            <div style="padding:.75rem 0;border-bottom:#{empty lesson.assessmentId ? '1px solid #f0f2f5' : 'none'}">
+                                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">
+                                    <div style="flex:1;">
+                                        <strong style="color:#{lesson.supplementary ? '#7f6b00' : '#1a3a6b'};">#{lesson.orderIndex}. #{lesson.title}</strong>
+                                        <h:panelGroup rendered="#{lesson.supplementary}">
+                                            <span style="font-size:.72rem;background:#fff8dc;color:#7f6b00;border:1px solid #e6d87a;
+                                                         border-radius:4px;padding:1px 6px;margin-left:.4rem;font-weight:600;">
+                                                REPASO
+                                            </span>
+                                        </h:panelGroup>
+                                        <h:panelGroup rendered="#{lesson.durationMinutes != null}">
+                                            <span style="font-size:.78rem;color:#999;margin-left:.5rem;">
+                                                #{lesson.durationMinutes} min
+                                            </span>
+                                        </h:panelGroup>
+                                    </div>
+                                    <div style="flex-shrink:0;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                                        <h:link value="Ver lección"
+                                                outcome="/views/lesson-viewer"
+                                                styleClass="btn btn-secondary btn-sm">
+                                            <f:param name="lessonId" value="#{lesson.id}"/>
+                                            <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                        </h:link>
+                                        <!-- Instructor: lesson edit/delete -->
+                                        <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                                            <h:link value="Editar" outcome="/views/lesson-meta-edit"
+                                                    styleClass="btn btn-secondary btn-sm">
+                                                <f:param name="lessonId" value="#{lesson.id}"/>
+                                                <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                            </h:link>
+                                        </h:panelGroup>
+                                        <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                                            <h:form style="display:inline;">
+                                                <h:commandButton value="Eliminar"
+                                                                 styleClass="btn btn-secondary btn-sm"
+                                                                 style="color:#c0392b;border-color:#e8c4c4;"
+                                                                 action="#{editBean.deleteLesson(lesson.id, courseBean.selectedCourseId)}"
+                                                                 onclick="return confirm('¿Eliminar esta lección? Esta acción no se puede deshacer.')"/>
+                                            </h:form>
+                                        </h:panelGroup>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Assessment row (inline, right after its lesson) -->
+                            <h:panelGroup rendered="#{not empty lesson.assessmentId}">
+                                <div style="padding:.55rem 0 .55rem 1.25rem;border-bottom:1px solid #f0f2f5;
+                                            display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;">
+                                    <div style="display:flex;align-items:center;gap:.5rem;flex:1;min-width:0;">
+                                        <span style="font-size:.8rem;background:#e8f0fe;color:#1a3a6b;
+                                                     width:20px;height:20px;border-radius:4px;display:inline-flex;
+                                                     align-items:center;justify-content:center;flex-shrink:0;">📝</span>
+                                        <span style="font-size:.85rem;color:#1a3a6b;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                            #{lesson.assessmentTitle}
+                                        </span>
+                                    </div>
+                                    <div style="display:flex;gap:.4rem;flex-shrink:0;">
+                                        <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')}">
+                                            <h:link value="Tomar evaluación" outcome="/views/assessment-take"
+                                                    styleClass="btn btn-primary btn-sm">
+                                                <f:param name="assessmentId" value="#{lesson.assessmentId}"/>
+                                                <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                            </h:link>
+                                        </h:panelGroup>
+                                        <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                                            <h:link value="Editar" outcome="/views/assessment-edit"
+                                                    styleClass="btn btn-secondary btn-sm">
+                                                <f:param name="assessmentId" value="#{lesson.assessmentId}"/>
+                                                <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                            </h:link>
+                                        </h:panelGroup>
+                                        <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                                            <h:form style="display:inline;">
+                                                <h:commandButton value="Eliminar"
+                                                                 styleClass="btn btn-secondary btn-sm"
+                                                                 style="color:#c0392b;border-color:#e8c4c4;"
+                                                                 action="#{editBean.deleteAssessment(lesson.assessmentId, courseBean.selectedCourseId)}"
+                                                                 onclick="return confirm('¿Eliminar esta evaluación? Esta acción no se puede deshacer.')"/>
+                                            </h:form>
+                                        </h:panelGroup>
+                                    </div>
+                                </div>
+                            </h:panelGroup>
+                            </h:panelGroup><!-- end supplementary guard -->
+                        </ui:repeat>
+
+                        <h:panelGroup rendered="#{empty courseModule.lessons}">
+                            <p style="color:#aaa;font-size:.85rem;padding:.5rem 0;">
+                                Este módulo aún no tiene lecciones.
+                            </p>
+                        </h:panelGroup>
+                    </div>
+                    </h:panelGroup>
+                </div>
+            </ui:repeat>
+
+            <h:panelGroup rendered="#{empty courseBean.modules}">
+                <p style="color:#888;padding:.5rem 0;">Este curso aún no tiene módulos.</p>
+            </h:panelGroup>
+        </div>
+        <!-- Fallback card for assessments not linked to any lesson -->
+        <h:panelGroup rendered="#{not empty courseBean.courseAssessments}">
+            <ui:repeat value="#{courseBean.courseAssessments}" var="asmt">
+                <h:panelGroup rendered="#{asmt.courseLevelOnly}">
+                    <div class="card" style="margin-top:1rem;display:flex;justify-content:space-between;
+                                            align-items:center;flex-wrap:wrap;gap:.75rem;">
+                        <div style="display:flex;align-items:center;gap:.6rem;">
+                            <span style="font-size:1.1rem;">📝</span>
+                            <div>
+                                <strong style="color:#1a3a6b;">#{asmt.title}</strong>
+                                <div style="font-size:.78rem;color:#888;">Evaluación del curso · Aprobación: #{asmt.passingScorePct}%</div>
+                            </div>
+                        </div>
+                        <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')}">
+                            <h:link value="Tomar evaluación" outcome="/views/assessment-take"
+                                    styleClass="btn btn-primary btn-sm">
+                                <f:param name="assessmentId" value="#{asmt.id}"/>
+                                <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                            </h:link>
+                        </h:panelGroup>
+                    </div>
+                </h:panelGroup>
+            </ui:repeat>
+        </h:panelGroup>
+
+    </h:panelGroup>
 
 </ui:define>
 </ui:composition>

@@ -1,4 +1,22 @@
 {
+  "users": [
+    {
+      "name": "puj_rabbit",
+      "password_hash": "WxV1ti+jh/5cncZwf+WJ9V/xkgyOqEwbjieSB7xEWrmntQry",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": ["administrator"],
+      "limits": {}
+    }
+  ],
+  "permissions": [
+    {
+      "user": "puj_rabbit",
+      "vhost": "puj_vhost",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
   "vhosts": [{ "name": "puj_vhost" }],
   "exchanges": [
     {
@@ -38,6 +56,26 @@
       }
     },
     {
+      "name": "gamification.events",
+      "vhost": "puj_vhost",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "platform.dlx",
+        "x-message-ttl": 86400000
+      }
+    },
+    {
+      "name": "notifications.events",
+      "vhost": "puj_vhost",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "platform.dlx",
+        "x-message-ttl": 86400000
+      }
+    },
+    {
       "name": "dead.letter.queue",
       "vhost": "puj_vhost",
       "durable": true,
@@ -58,6 +96,55 @@
       "destination": "email.notifications",
       "destination_type": "queue",
       "routing_key": "email.#"
+    },
+    {
+      "source": "platform.events",
+      "vhost": "puj_vhost",
+      "destination": "gamification.events",
+      "destination_type": "queue",
+      "routing_key": "analytics.lesson_completed"
+    },
+    {
+      "source": "platform.events",
+      "vhost": "puj_vhost",
+      "destination": "gamification.events",
+      "destination_type": "queue",
+      "routing_key": "analytics.assessment_submitted"
+    },
+    {
+      "source": "platform.events",
+      "vhost": "puj_vhost",
+      "destination": "gamification.events",
+      "destination_type": "queue",
+      "routing_key": "analytics.forum_post_created"
+    },
+    {
+      "source": "platform.events",
+      "vhost": "puj_vhost",
+      "destination": "notifications.events",
+      "destination_type": "queue",
+      "routing_key": "analytics.lesson_completed"
+    },
+    {
+      "source": "platform.events",
+      "vhost": "puj_vhost",
+      "destination": "notifications.events",
+      "destination_type": "queue",
+      "routing_key": "analytics.assessment_submitted"
+    },
+    {
+      "source": "platform.events",
+      "vhost": "puj_vhost",
+      "destination": "notifications.events",
+      "destination_type": "queue",
+      "routing_key": "analytics.certificate_issued"
+    },
+    {
+      "source": "platform.events",
+      "vhost": "puj_vhost",
+      "destination": "notifications.events",
+      "destination_type": "queue",
+      "routing_key": "analytics.learning_path_enrolled"
     },
     {
       "source": "platform.dlx",

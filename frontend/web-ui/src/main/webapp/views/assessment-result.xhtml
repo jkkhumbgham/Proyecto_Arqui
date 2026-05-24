@@ -10,11 +10,17 @@
 
     <h2 class="page-title">Resultado de la evaluación</h2>
 
-    <div class="card result-box">
-        <div class="result-score">
+    <div class="card result-box" style="max-width:560px;margin:0 auto;">
+
+        <!-- Score circle -->
+        <div class="result-score" style="font-size:3.5rem;font-weight:700;
+             color:#{assessmentBean.submissionResult['passed'] ? '#27ae60' : '#c0392b'};
+             text-align:center;margin-bottom:.5rem;">
             #{assessmentBean.submissionResult['score']}%
         </div>
-        <p style="margin-top:.5rem;font-size:1.1rem;color:#555;">
+
+        <!-- Passed / failed label -->
+        <p style="text-align:center;font-size:1.15rem;margin:0 0 1.5rem;">
             <c:if test="#{assessmentBean.submissionResult['passed']}">
                 <span style="color:#27ae60;font-weight:600;">¡Aprobado!</span>
             </c:if>
@@ -23,16 +29,52 @@
             </c:if>
         </p>
 
-        <c:if test="#{not empty assessmentBean.adaptiveRecommendation}">
-            <div class="adaptive-tip">
-                <strong>Recomendación del sistema adaptativo:</strong>
-                <p style="margin-top:.4rem;">#{assessmentBean.adaptiveRecommendation}</p>
+        <!-- Adaptive recommendation (only when rule fires) -->
+        <c:if test="#{not empty assessmentBean.adaptiveRecommendation or assessmentBean.supplementaryLesson != null}">
+            <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:10px;
+                        padding:1.2rem 1.4rem;margin-bottom:1.5rem;">
+                <div style="display:flex;align-items:flex-start;gap:.75rem;">
+                    <span style="font-size:1.4rem;flex-shrink:0;">📚</span>
+                    <div style="flex:1;">
+                        <strong style="color:#7f6b00;font-size:1rem;">Material de repaso recomendado</strong>
+
+                        <c:if test="#{not empty assessmentBean.adaptiveRecommendation}">
+                            <p style="margin:.5rem 0 0;color:#555;font-size:.92rem;line-height:1.55;">
+                                #{assessmentBean.adaptiveRecommendation}
+                            </p>
+                        </c:if>
+
+                        <c:if test="#{assessmentBean.supplementaryLesson != null}">
+                            <div style="margin-top:.85rem;padding:.7rem .9rem;
+                                        background:#fffde7;border-radius:6px;
+                                        border-left:3px solid #f9a825;">
+                                <div style="font-size:.8rem;color:#7f6b00;text-transform:uppercase;
+                                            letter-spacing:.05em;margin-bottom:.25rem;">Lección recomendada</div>
+                                <strong style="color:#1a3a6b;">#{assessmentBean.supplementaryLesson['title']}</strong>
+                            </div>
+                            <div style="margin-top:.85rem;">
+                                <h:link outcome="/views/lesson-viewer" styleClass="btn btn-primary btn-sm"
+                                        style="display:inline-block;text-decoration:none;">
+                                    <f:param name="lessonId" value="#{assessmentBean.supplementaryLessonId}"/>
+                                    <f:param name="courseId" value="#{assessmentBean.backCourseId}"/>
+                                    Ver lección de repaso →
+                                </h:link>
+                            </div>
+                        </c:if>
+                    </div>
+                </div>
             </div>
         </c:if>
 
-        <div style="margin-top:1.5rem;display:flex;gap:1rem;justify-content:center;">
-            <h:link value="Ver más evaluaciones" outcome="/views/assessments" styleClass="btn btn-primary"/>
-            <h:link value="Ir al Dashboard"      outcome="/views/dashboard"   styleClass="btn btn-secondary"/>
+        <!-- Actions -->
+        <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+            <c:if test="#{not empty assessmentBean.backCourseId}">
+                <h:link outcome="/views/course-detail" styleClass="btn btn-primary">
+                    <f:param name="courseId" value="#{assessmentBean.backCourseId}"/>
+                    Volver al curso
+                </h:link>
+            </c:if>
+            <h:link value="Ir al Dashboard" outcome="/views/dashboard" styleClass="btn btn-secondary"/>
         </div>
     </div>
 

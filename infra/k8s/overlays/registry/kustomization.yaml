@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Overlay para minikube con imágenes publicadas en ghcr.io (GitHub Container Registry — gratis).
+# Edita la línea "newName" de cada servicio con tu usuario de GitHub antes de aplicar.
+#
+# Flujo completo: ver manual.md §7
+
+resources:
+  - ../../
+  - mailhog.yaml
+
+# ── Cambia TU_USUARIO por tu nombre de usuario de GitHub ─────────────────────
+images:
+  - name: REGISTRY/puj/user-service
+    newName: ghcr.io/TU_USUARIO/puj/user-service
+    newTag: latest
+  - name: REGISTRY/puj/course-service
+    newName: ghcr.io/TU_USUARIO/puj/course-service
+    newTag: latest
+  - name: REGISTRY/puj/assessment-service
+    newName: ghcr.io/TU_USUARIO/puj/assessment-service
+    newTag: latest
+  - name: REGISTRY/puj/collaboration-service
+    newName: ghcr.io/TU_USUARIO/puj/collaboration-service
+    newTag: latest
+  - name: REGISTRY/puj/analytics-service
+    newName: ghcr.io/TU_USUARIO/puj/analytics-service
+    newTag: latest
+  - name: REGISTRY/puj/email-service
+    newName: ghcr.io/TU_USUARIO/puj/email-service
+    newTag: latest
+  - name: REGISTRY/puj/web-ui
+    newName: ghcr.io/TU_USUARIO/puj/web-ui
+    newTag: latest
+
+patches:
+  - path: patch-storageclass.yaml
+  - path: patch-ingress.yaml
+  - path: patch-email-smtp.yaml

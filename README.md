@@ -9,10 +9,11 @@ Equipo: Laura Juliana Garzón Arias · Juan Camilo Alba Castro · Carlos Manuel 
 ## Tabla de contenidos
 
 1. [Qué es esto](#1-qué-es-esto)
-2. [Correr en local — resumen rápido](#2-correr-en-local--resumen-rápido)
-3. [Del local a producción](#3-del-local-a-producción)
-4. [Estructura del repositorio](#4-estructura-del-repositorio)
-5. [Decisiones de implementación](#5-decisiones-de-implementación)
+2. [Arquitectura del sistema](#2-arquitectura-del-sistema)
+3. [Correr en local — resumen rápido](#3-correr-en-local--resumen-rápido)
+4. [Del local a producción](#4-del-local-a-producción)
+5. [Estructura del repositorio](#5-estructura-del-repositorio)
+6. [Decisiones de implementación](#6-decisiones-de-implementación)
 
 ---
 
@@ -27,7 +28,90 @@ La plataforma es para instituciones colombianas, lo que impone cumplir la **Ley 
 
 ---
 
-## 2. Correr en local — resumen rápido
+## 2. Arquitectura del sistema
+
+```
+                         ┌────────────────────────────────────────────┐
+                         │                 NAVEGADOR                  │
+                         │           http://localhost:8080            │
+                         └──────────────────────┬─────────────────────┘
+                                                │ HTTP :8080
+                                                ▼
+        ┌───────────────────────────────────────────────────────────────────────────────────┐
+        │  FRONTEND  ·  WildFly 31  ·  :8080                                                │
+        │  web-ui  ·  JSF 4.0  ·  Mojarra                                                   │
+        └──────┬────────────┬────────────┬────────────┬────────────┬────────────────────────┘
+               │HTTP        │HTTP        │HTTP        │HTTP        │HTTP
+               │            │            │            │            │
+               ▼            ▼            ▼            ▼            ▼
+  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐
+  │ user-service │  │course-service│  │ assessment-  │  │  collab-     │  │   analytics-service      │
+  │    :8081     │  │    :8082     │  │   service    │  │   service    │  │   ASP.NET Core 8         │
+  │  WildFly 31  │  │  WildFly 31  │  │    :8083     │  │    :8084     │  │   MassTransit 8  :8085   │
+  └──────┬───────┘  └──────┬───────┘  │  WildFly 31  │  │  WildFly 31  │  └────────┬─────────────────┘
+         │                 │          └──────┬───────┘  └──────┬───────┘           │
+         │           HTTP──►user-svc         │                 │                   │ consume
+         │                          HTTP──►user-svc      HTTP──►user-svc           │ (RabbitMQ)
+         │                          HTTP──►course-svc                              │
+         │                                                                         │ EF Core
+  ┌──────────────────────────────────────────────────────────────────────┐         ▼
+  │  email-service  ·  :8086  ·  WildFly 31                             │  ┌──────────────────────────┐
+  │  consume RabbitMQ (email.#)  ──►  envía a MailHog :1025 SMTP        │  │  analytics_db            │
+  └──────────────────────────────────────────────────────────────────────┘  │  PostgreSQL 15  ·  :5432 │
+                                                                             │  schema: analytics       │
+  ─────────────────────────── JDBC (todos los servicios Java) ──────────    └──────────────────────────┘
+         │
+         ▼
+  ┌───────────────────────────────────────────────────────────────────────────────────────────┐
+  │  PostgreSQL 15  ·  :5432  ·  base de datos: learning_platform                            │
+  │                                                                                           │
+  │  ├── schema: users          ◄──  user-service                                            │
+  │  ├── schema: courses        ◄──  course-service                                          │
+  │  ├── schema: assessments    ◄──  assessment-service                                      │
+  │  └── schema: collaboration  ◄──  collab-service                                          │
+  └───────────────────────────────────────────────────────────────────────────────────────────┘
+
+  ┌───────────────────────────────────────────────────────────────────────────────────────────┐
+  │  RabbitMQ 3.13  ·  :5672  ·  vhost: puj_vhost                                            │
+  │                                                                                           │
+  │  exchange: platform.events (topic)                                                        │
+  │      │                                                                                    │
+  │      ├── cola: analytics.results    routing: analytics.#  ──►  analytics-service consume  │
+  │      │         UserRegistered · CourseEnrolled · LessonCompleted · AssessmentSubmitted    │
+  │      │                                                                                    │
+  │      ├── cola: email.notifications  routing: email.#      ──►  email-service consume      │
+  │      │                                                                                    │
+  │      └── dead.letter.queue  (DLX: platform.dlx)  ◄──  NACK × 3 de cualquier cola        │
+  │                                                                                           │
+  │  Publicadores (envelope MassTransit v8  ·  application/vnd.masstransit+json):             │
+  │  user-svc    ──►  UserRegistered                                                          │
+  │  course-svc  ──►  CourseEnrolled  ·  LessonCompleted                                     │
+  │  assess-svc  ──►  AssessmentSubmitted                                                     │
+  └───────────────────────────────────────────────────────────────────────────────────────────┘
+
+  ┌───────────────────────────────────────────────────────────────────────────────────────────┐
+  │  Redis 7  ·  :6379                                                                        │
+  │                                                                                           │
+  │  user-svc    ──►  token blacklist  ·  almacén de refresh tokens                          │
+  │  course-svc  ──►  caché de búsquedas de cursos  (TTL 300 s)                              │
+  │  assess-svc  ──►  caché de resultados de evaluaciones                                    │
+  │  collab-svc  ──►  pub/sub para sincronizar mensajes WebSocket entre réplicas             │
+  └───────────────────────────────────────────────────────────────────────────────────────────┘
+
+  ┌──────────────────────────────────────────────────────┐  ┌────────────────────────────────────────┐
+  │  MinIO  ·  :9000  ·  consola: :9001                  │  │  MailHog  ·  :1025 SMTP  ·  :8025 UI  │
+  │                                                      │  │                                        │
+  │  bucket: course-files                                │  │  email-service envía aquí por SMTP     │
+  │    course-svc escribe  ·  web-ui lee (URL pública)   │  │  todos los correos quedan capturados   │
+  │                                                      │  │  sin enviarse en entorno local         │
+  │  bucket: certificates                                │  └────────────────────────────────────────┘
+  │    analytics-svc escribe PDFs  ·  web-ui descarga    │
+  └──────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3. Correr en local — resumen rápido
 
 ```bash
 # 1. Generar claves JWT y crear .env (solo la primera vez)
@@ -37,13 +121,13 @@ bash scripts/setup-env.sh
 docker compose up -d
 ```
 
-Las variables de AWS y SMTP son opcionales: sin ellas, la subida de archivos a S3 y el envío de correos reales no funcionan, pero el resto del stack sí. Los correos quedan capturados en **MailHog** — http://localhost:8025.
+En local, el almacenamiento de archivos usa **MinIO** (S3-compatible, sin cuenta AWS) y los correos quedan capturados en **MailHog** — http://localhost:8025 — sin enviarse realmente. No se necesitan credenciales externas para correr el stack completo.
 
 Ver **[manual.md](manual.md)** para la guía completa: puertos, pruebas con curl, base de datos, WebSocket, RabbitMQ y despliegue en Kubernetes.
 
 ---
 
-## 3. Del local a producción
+## 4. Del local a producción
 
 El SAD y SRS plantean un despliegue en AWS EKS. Esta tabla resume qué cambia entre entornos; los pasos exactos están en el [manual.md § 6](manual.md#6-correr-en-kubernetes-eks) y [§ 7 — Del local a producción](manual.md#7-del-local-a-producción-sadsr).
 
@@ -60,7 +144,7 @@ El SAD y SRS plantean un despliegue en AWS EKS. Esta tabla resume qué cambia en
 
 ---
 
-## 4. Estructura del repositorio
+## 5. Estructura del repositorio
 
 ```
 .
@@ -80,7 +164,7 @@ El SAD y SRS plantean un despliegue en AWS EKS. Esta tabla resume qué cambia en
 │   └── web-ui/            JSF (MPA), un bean por pantalla        → WildFly 31 / Jakarta EE 10
 │
 ├── infra/
-│   ├── db/init.sql        Crea los 5 schemas de PostgreSQL
+│   ├── db/init.sql        Crea los 4 schemas Java en learning_platform + base de datos analytics_db
 │   ├── rabbitmq/          Exchange topic + colas con DLX
 │   ├── wildfly/           Módulo JDBC para PostgreSQL en WildFly
 │   └── k8s/               Un directorio por servicio con Deployment + Service + HPA
@@ -97,11 +181,11 @@ El SAD y SRS plantean un despliegue en AWS EKS. Esta tabla resume qué cambia en
 
 ---
 
-## 5. Decisiones de implementación
+## 6. Decisiones de implementación
 
 ### Service-Based en lugar de Microservicios
 
-Con un equipo de 4 personas, los microservicios añaden trabajo que no aporta valor: un registry de servicios, circuit breakers distribuidos, tracing entre 15 deploys, gestión de N bases de datos separadas. Service-Based da los mismos beneficios de despliegue independiente con mucho menos overhead. El límite elegido fue que cada servicio tenga su propia base de datos lógica (schema), no física — lo que elimina la coordinación de migraciones entre equipos pero evita tener que operar 5 instancias de PostgreSQL.
+Con un equipo de 4 personas, los microservicios añaden trabajo que no aporta valor: un registry de servicios, circuit breakers distribuidos, tracing entre 15 deploys, gestión de N bases de datos separadas. Service-Based da los mismos beneficios de despliegue independiente con mucho menos overhead. El límite elegido fue que cada servicio Java tenga su propia base de datos lógica (schema) dentro de `learning_platform`, no física — lo que elimina la coordinación de migraciones entre equipos pero evita tener que operar 5 instancias de PostgreSQL. La excepción es analytics-service (.NET), que usa una base de datos física separada (`analytics_db`) dentro del mismo servidor para aislar su esquema de EF Core del esquema Hibernate de los servicios Java.
 
 ### WildFly 31 en lugar de Spring Boot para los servicios Java
 

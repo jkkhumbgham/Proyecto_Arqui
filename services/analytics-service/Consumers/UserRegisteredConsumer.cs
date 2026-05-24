@@ -1,4 +1,5 @@
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using Puj.Analytics.Data;
 using Puj.Analytics.Messages;
 using Puj.Analytics.Models;
@@ -13,12 +14,20 @@ public class UserRegisteredConsumer(AnalyticsDbContext db, ILogger<UserRegistere
         var msg = context.Message;
         logger.LogInformation("Processing USER_REGISTERED: {UserId}", msg.UserId);
 
-        db.UserRecords.Add(new UserRecord {
-            UserId       = Guid.Parse(msg.UserId),
-            Email        = msg.Email,
-            Role         = msg.Role,
-            RegisteredAt = msg.OccurredAt
-        });
+        var stats = await db.PlatformStats.FirstOrDefaultAsync();
+        if (stats == null) { stats = new PlatformStats(); db.PlatformStats.Add(stats); }
+        stats.TotalUsers++;
+        stats.UpdatedAt = DateTime.UtcNow;
+
+        var userId = Guid.Parse(msg.UserId);
+        var cache  = await db.StudentNameCaches.FirstOrDefaultAsync(c => c.UserId == userId);
+        if (cache == null)
+        {
+            cache = new StudentNameCache { UserId = userId };
+            db.StudentNameCaches.Add(cache);
+        }
+        cache.StudentName = $"{msg.FirstName} {msg.LastName}".Trim();
+        cache.UpdatedAt   = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
     }

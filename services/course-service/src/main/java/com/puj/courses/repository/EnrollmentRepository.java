@@ -57,4 +57,51 @@ public class EnrollmentRepository {
                 .setParameter("cid", courseId)
                 .getSingleResult();
     }
+
+    public double avgProgressPct(UUID courseId) {
+        Double avg = em.createQuery(
+                        "SELECT AVG(e.progressPct) FROM Enrollment e WHERE e.course.id = :cid AND e.deletedAt IS NULL",
+                        Double.class)
+                .setParameter("cid", courseId)
+                .getSingleResult();
+        return avg != null ? avg : 0.0;
+    }
+
+    /**
+     * Returns [userId, moduleId, moduleTitle, moduleOrderIndex, MAX(completedAt)]
+     * per (user, module) combination. The caller picks the max-completedAt row
+     * per user to determine each student's current module.
+     */
+    public List<Object[]> latestModulePerUser(UUID courseId) {
+        return em.createQuery(
+                        "SELECT p.userId, l.module.id, l.module.title, l.module.orderIndex, MAX(p.completedAt)" +
+                        " FROM LessonProgress p JOIN p.lesson l" +
+                        " WHERE l.module.course.id = :cid AND l.module.deletedAt IS NULL" +
+                        " GROUP BY p.userId, l.module.id, l.module.title, l.module.orderIndex",
+                        Object[].class)
+                .setParameter("cid", courseId)
+                .getResultList();
+    }
+
+    public long countUniqueStudentsInCourses(List<UUID> courseIds) {
+        if (courseIds == null || courseIds.isEmpty()) return 0;
+        return em.createQuery(
+                        "SELECT COUNT(DISTINCT e.userId) FROM Enrollment e" +
+                        " WHERE e.course.id IN :ids AND e.deletedAt IS NULL",
+                        Long.class)
+                .setParameter("ids", courseIds)
+                .getSingleResult();
+    }
+
+    public long countNotStarted(UUID courseId) {
+        return em.createQuery(
+                        "SELECT COUNT(DISTINCT e.userId) FROM Enrollment e" +
+                        " WHERE e.course.id = :cid AND e.deletedAt IS NULL" +
+                        " AND e.userId NOT IN (" +
+                        "   SELECT DISTINCT p.userId FROM LessonProgress p WHERE p.courseId = :cid" +
+                        " )",
+                        Long.class)
+                .setParameter("cid", courseId)
+                .getSingleResult();
+    }
 }

@@ -63,4 +63,16 @@ public class UserRepository {
                 .setParameter("email", email)
                 .getSingleResult() > 0;
     }
+
+    public List<User> findInactive(java.time.Instant threshold, int page, int size) {
+        return em.createQuery(
+                        "SELECT u FROM User u WHERE u.deletedAt IS NULL" +
+                        " AND (u.lastLoginAt IS NULL OR u.lastLoginAt < :threshold)" +
+                        " ORDER BY u.lastLoginAt ASC NULLS FIRST",
+                        User.class)
+                .setParameter("threshold", threshold)
+                .setFirstResult(page * size)
+                .setMaxResults(size)
+                .getResultList();
+    }
 }

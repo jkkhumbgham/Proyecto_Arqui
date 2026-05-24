@@ -28,10 +28,10 @@ public static class ExportEndpoints
                 .ToListAsync();
 
             var csv = BuildCsv(
-                new[] { "CourseId", "Title", "Enrollments", "Completions", "AvgScore", "PassRate", "UpdatedAt" },
+                new[] { "CourseId", "Title", "Enrollments", "Submissions", "AvgScore", "PassRate", "UpdatedAt" },
                 metrics.Select(m => new object[] {
                     m.CourseId, m.CourseTitle, m.TotalEnrollments,
-                    m.TotalCompletions, m.AverageScore, m.PassRate,
+                    m.TotalSubmissions, $"{m.AverageScore:F2}", $"{m.PassRate:F2}",
                     m.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")
                 })
             );
@@ -41,41 +41,7 @@ public static class ExportEndpoints
                 "text/csv; charset=utf-8",
                 $"courses_{DateTime.UtcNow:yyyyMMdd}.csv");
         })
-        .WithSummary("Exportar métricas de cursos en CSV (DIRECTOR/ADMIN)")
-        .WithOpenApi();
-
-        // ── GET /api/v1/analytics/export/submissions.csv ──────────────────────
-        group.MapGet("/submissions.csv", async (AnalyticsDbContext db, HttpContext ctx,
-            [Microsoft.AspNetCore.Mvc.FromQuery] Guid? courseId,
-            [Microsoft.AspNetCore.Mvc.FromQuery] DateTime? from,
-            [Microsoft.AspNetCore.Mvc.FromQuery] DateTime? to) =>
-        {
-            if (!IsDirectorOrAdmin(ctx)) return Results.Forbid();
-
-            var query = db.SubmissionRecords.AsQueryable();
-            if (courseId.HasValue) query = query.Where(s => s.CourseId == courseId);
-            if (from.HasValue)     query = query.Where(s => s.OccurredAt >= from);
-            if (to.HasValue)       query = query.Where(s => s.OccurredAt <= to);
-
-            var rows = await query.OrderByDescending(s => s.OccurredAt).ToListAsync();
-
-            var csv = BuildCsv(
-                new[] { "SubmissionId", "UserId", "AssessmentId", "CourseId",
-                        "Score", "MaxScore", "Passed", "DurationSec", "AttemptNumber", "OccurredAt" },
-                rows.Select(s => new object[] {
-                    s.Id, s.UserId, s.AssessmentId, s.CourseId,
-                    s.Score, s.MaxScore, s.Passed, s.DurationSeconds,
-                    s.AttemptNumber, s.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")
-                })
-            );
-
-            return Results.File(
-                System.Text.Encoding.UTF8.GetBytes(csv),
-                "text/csv; charset=utf-8",
-                $"submissions_{DateTime.UtcNow:yyyyMMdd}.csv");
-        })
-        .WithSummary("Exportar historial de submissions en CSV (DIRECTOR/ADMIN)")
-        .WithOpenApi();
+        .WithSummary("Exportar métricas de cursos en CSV (DIRECTOR/ADMIN)");
 
         // ── GET /api/v1/analytics/export/courses.pdf ──────────────────────────
         group.MapGet("/courses.pdf", async (AnalyticsDbContext db, HttpContext ctx) =>
@@ -86,42 +52,18 @@ public static class ExportEndpoints
                 .OrderByDescending(c => c.TotalEnrollments)
                 .ToListAsync();
 
-            var totalUsers       = await db.UserRecords.CountAsync();
-            var totalEnrollments = await db.EnrollmentRecords.CountAsync();
-            var totalSubmissions = await db.SubmissionRecords.CountAsync();
+            var stats = await db.PlatformStats.FirstOrDefaultAsync();
 
-            var pdfBytes = BuildCourseReportPdf(metrics, totalUsers, totalEnrollments, totalSubmissions);
+            var pdfBytes = BuildCourseReportPdf(
+                metrics,
+                stats?.TotalUsers       ?? 0,
+                stats?.TotalEnrollments ?? 0,
+                stats?.TotalSubmissions ?? 0);
 
             return Results.File(pdfBytes, "application/pdf",
                 $"informe_cursos_{DateTime.UtcNow:yyyyMMdd}.pdf");
         })
-        .WithSummary("Exportar informe de cursos en PDF (DIRECTOR/ADMIN)")
-        .WithOpenApi();
-
-        // ── GET /api/v1/analytics/export/submissions.pdf ──────────────────────
-        group.MapGet("/submissions.pdf", async (AnalyticsDbContext db, HttpContext ctx,
-            [Microsoft.AspNetCore.Mvc.FromQuery] Guid? courseId) =>
-        {
-            if (!IsDirectorOrAdmin(ctx)) return Results.Forbid();
-
-            var query = db.SubmissionRecords.AsQueryable();
-            if (courseId.HasValue) query = query.Where(s => s.CourseId == courseId);
-
-            var rows = await query.OrderByDescending(s => s.OccurredAt)
-                .Take(500) // cap for large exports
-                .ToListAsync();
-
-            CourseMetric? metric = null;
-            if (courseId.HasValue)
-                metric = await db.CourseMetrics.FirstOrDefaultAsync(m => m.CourseId == courseId);
-
-            var pdfBytes = BuildSubmissionsReportPdf(rows, metric);
-
-            return Results.File(pdfBytes, "application/pdf",
-                $"informe_evaluaciones_{DateTime.UtcNow:yyyyMMdd}.pdf");
-        })
-        .WithSummary("Exportar informe de evaluaciones en PDF (DIRECTOR/ADMIN)")
-        .WithOpenApi();
+        .WithSummary("Exportar informe de cursos en PDF (DIRECTOR/ADMIN)");
     }
 
     // ── CSV builder (RFC 4180) ─────────────────────────────────────────────────
@@ -142,10 +84,10 @@ public static class ExportEndpoints
         return value;
     }
 
-    // ── PDF builders ──────────────────────────────────────────────────────────
+    // ── PDF builder ───────────────────────────────────────────────────────────
 
     private static byte[] BuildCourseReportPdf(
-        List<CourseMetric> metrics, int totalUsers, int totalEnrollments, int totalSubmissions)
+        List<CourseMetric> metrics, long totalUsers, long totalEnrollments, long totalSubmissions)
     {
         return Document.Create(container =>
         {
@@ -166,7 +108,6 @@ public static class ExportEndpoints
 
                 page.Content().Column(col =>
                 {
-                    // Summary cards
                     col.Item().PaddingTop(12).Row(row =>
                     {
                         row.RelativeItem().Border(1).BorderColor(Colors.Grey.Lighten2)
@@ -196,32 +137,25 @@ public static class ExportEndpoints
                     {
                         table.ColumnsDefinition(c =>
                         {
-                            c.RelativeColumn(3); // Title
-                            c.RelativeColumn(1); // Enrollments
-                            c.RelativeColumn(1); // Completions
-                            c.RelativeColumn(1); // Avg Score
-                            c.RelativeColumn(1); // Pass Rate
+                            c.RelativeColumn(3);
+                            c.RelativeColumn(1);
+                            c.RelativeColumn(1);
+                            c.RelativeColumn(1);
+                            c.RelativeColumn(1);
                         });
 
-                        // Header
                         table.Header(header =>
                         {
                             static IContainer HeaderCell(IContainer c) =>
                                 c.Background(Colors.Blue.Darken3).Padding(6);
 
-                            header.Cell().Element(HeaderCell)
-                                  .Text("Curso").FontColor(Colors.White).SemiBold();
-                            header.Cell().Element(HeaderCell)
-                                  .Text("Inscritos").FontColor(Colors.White).SemiBold();
-                            header.Cell().Element(HeaderCell)
-                                  .Text("Completados").FontColor(Colors.White).SemiBold();
-                            header.Cell().Element(HeaderCell)
-                                  .Text("Prom. Score").FontColor(Colors.White).SemiBold();
-                            header.Cell().Element(HeaderCell)
-                                  .Text("Tasa Aprobación").FontColor(Colors.White).SemiBold();
+                            header.Cell().Element(HeaderCell).Text("Curso").FontColor(Colors.White).SemiBold();
+                            header.Cell().Element(HeaderCell).Text("Inscritos").FontColor(Colors.White).SemiBold();
+                            header.Cell().Element(HeaderCell).Text("Entregas").FontColor(Colors.White).SemiBold();
+                            header.Cell().Element(HeaderCell).Text("Prom. Score").FontColor(Colors.White).SemiBold();
+                            header.Cell().Element(HeaderCell).Text("Tasa Aprobación").FontColor(Colors.White).SemiBold();
                         });
 
-                        // Rows
                         bool odd = false;
                         foreach (var m in metrics)
                         {
@@ -233,9 +167,8 @@ public static class ExportEndpoints
 
                             table.Cell().Element(c => DataCell(c, bg)).Text(m.CourseTitle);
                             table.Cell().Element(c => DataCell(c, bg)).Text(m.TotalEnrollments.ToString());
-                            table.Cell().Element(c => DataCell(c, bg)).Text(m.TotalCompletions.ToString());
-                            table.Cell().Element(c => DataCell(c, bg))
-                                 .Text($"{m.AverageScore:F1}%");
+                            table.Cell().Element(c => DataCell(c, bg)).Text(m.TotalSubmissions.ToString());
+                            table.Cell().Element(c => DataCell(c, bg)).Text($"{m.AverageScore:F1}%");
                             table.Cell().Element(c => DataCell(c, bg))
                                  .Text($"{m.PassRate:F1}%")
                                  .FontColor(m.PassRate >= 60 ? Colors.Green.Darken2 : Colors.Red.Darken2);
@@ -250,79 +183,6 @@ public static class ExportEndpoints
                         t.Span(" de ").FontSize(9).FontColor(Colors.Grey.Medium);
                         t.TotalPages().FontSize(9);
                     });
-            });
-        }).GeneratePdf();
-    }
-
-    private static byte[] BuildSubmissionsReportPdf(List<SubmissionRecord> rows, CourseMetric? metric)
-    {
-        return Document.Create(container =>
-        {
-            container.Page(page =>
-            {
-                page.Size(PageSizes.A4.Landscape());
-                page.Margin(1.5f, Unit.Centimetre);
-                page.DefaultTextStyle(t => t.FontSize(9));
-
-                page.Header().Column(col =>
-                {
-                    var title = metric != null
-                        ? $"Historial de Evaluaciones — {metric.CourseTitle}"
-                        : "Historial de Evaluaciones — Todos los cursos";
-                    col.Item().Text(title).SemiBold().FontSize(13).FontColor(Colors.Blue.Darken3);
-                    col.Item().Text($"Generado: {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC — {rows.Count} registros")
-                       .FontSize(8).FontColor(Colors.Grey.Darken1);
-                    col.Item().PaddingTop(4).LineHorizontal(1).LineColor(Colors.Blue.Darken2);
-                });
-
-                page.Content().PaddingTop(10).Table(table =>
-                {
-                    table.ColumnsDefinition(c =>
-                    {
-                        c.RelativeColumn(2); // UserId
-                        c.RelativeColumn(1.5f); // Score
-                        c.RelativeColumn(1); // Passed
-                        c.RelativeColumn(1); // Attempt
-                        c.RelativeColumn(1.5f); // Duration
-                        c.RelativeColumn(2); // Date
-                    });
-
-                    table.Header(header =>
-                    {
-                        static IContainer H(IContainer c) =>
-                            c.Background(Colors.Blue.Darken3).Padding(5);
-
-                        foreach (var h in new[] { "Usuario ID", "Score", "Aprobado", "Intento", "Duración (min)", "Fecha" })
-                            header.Cell().Element(H).Text(h).FontColor(Colors.White).SemiBold();
-                    });
-
-                    bool odd = false;
-                    foreach (var s in rows)
-                    {
-                        var bg = odd ? Colors.Grey.Lighten4 : Colors.White;
-                        odd = !odd;
-
-                        static IContainer D(IContainer c, string bg) => c.Background(bg).Padding(4);
-
-                        table.Cell().Element(c => D(c, bg)).Text(s.UserId.ToString()[..8] + "...");
-                        table.Cell().Element(c => D(c, bg)).Text($"{s.Score}/{s.MaxScore}");
-                        table.Cell().Element(c => D(c, bg))
-                             .Text(s.Passed ? "Sí" : "No")
-                             .FontColor(s.Passed ? Colors.Green.Darken2 : Colors.Red.Darken2);
-                        table.Cell().Element(c => D(c, bg)).Text(s.AttemptNumber.ToString());
-                        table.Cell().Element(c => D(c, bg))
-                             .Text($"{s.DurationSeconds / 60.0:F1}");
-                        table.Cell().Element(c => D(c, bg))
-                             .Text(s.OccurredAt.ToString("yyyy-MM-dd HH:mm"));
-                    }
-                });
-
-                page.Footer().AlignCenter().Text(t => {
-                    t.Span("Página ").FontSize(8).FontColor(Colors.Grey.Medium);
-                    t.CurrentPageNumber().FontSize(8);
-                    t.Span(" de ").FontSize(8).FontColor(Colors.Grey.Medium);
-                    t.TotalPages().FontSize(8);
-                });
             });
         }).GeneratePdf();
     }

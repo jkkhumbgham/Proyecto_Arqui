@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Nueva lección</ui:define>
+<ui:define name="content">
+
+    <h:link value="← Volver al curso" outcome="/views/course-detail" styleClass="btn btn-secondary btn-sm"
+            style="margin-bottom:1rem;display:inline-block;"
+            rendered="#{instructorBean.courseId != null}">
+        <f:param name="courseId" value="#{instructorBean.courseId}"/>
+    </h:link>
+
+    <h2 class="page-title">Agregar lección</h2>
+
+    <div class="card" style="max-width:500px;">
+        <h:form>
+            <h:inputHidden value="#{instructorBean.courseId}"/>
+            <h:inputHidden value="#{instructorBean.moduleId}"/>
+
+            <div class="form-group">
+                <label class="form-label">Título de la lección *</label>
+                <h:inputText value="#{instructorBean.newLessonTitle}" styleClass="form-control"
+                             style="width:100%;" placeholder="Ej: ¿Qué es la programación?"/>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Duración estimada (minutos)</label>
+                <h:inputText value="#{instructorBean.newLessonDuration}" styleClass="form-control"
+                             style="width:120px;" placeholder="15"/>
+            </div>
+
+            <div class="form-group" style="margin-top:.5rem;">
+                <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer;">
+                    <h:selectBooleanCheckbox value="#{instructorBean.newLessonSupplementary}"/>
+                    <span>
+                        <strong>Lección de repaso</strong>
+                        <span style="display:block;font-size:.82rem;color:#666;">
+                            Oculta para estudiantes. El motor adaptativo la recomienda si no superan el umbral de una evaluación.
+                        </span>
+                    </span>
+                </label>
+            </div>
+
+            <div style="display:flex;gap:1rem;margin-top:1rem;">
+                <h:link value="Cancelar" outcome="/views/course-detail" styleClass="btn btn-secondary"
+                        rendered="#{instructorBean.courseId != null}">
+                    <f:param name="courseId" value="#{instructorBean.courseId}"/>
+                </h:link>
+                <h:commandButton value="Crear lección" action="#{instructorBean.createLesson}"
+                                 styleClass="btn btn-primary"/>
+            </div>
+        </h:form>
+    </div>
+
+</ui:define>
+</ui:composition>
+</html>

@@ -6,6 +6,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,5 +36,13 @@ public class AdaptiveRuleRepository {
         } catch (NoResultException e) {
             return Optional.empty();
         }
+    }
+
+    public List<AdaptiveRule> findByCourse(UUID courseId) {
+        return em.createQuery(
+                "SELECT r FROM AdaptiveRule r WHERE r.courseId = :cid AND r.deletedAt IS NULL AND r.active = true",
+                AdaptiveRule.class)
+                .setParameter("cid", courseId)
+                .getResultList();
     }
 }

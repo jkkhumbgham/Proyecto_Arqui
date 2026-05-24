@@ -9,10 +9,11 @@
     <title>PUJ — <ui:insert name="pageTitle">Panel</ui:insert></title>
     <h:outputStylesheet library="css" name="app.css"/>
 </h:head>
+<f:metadata>
+    <f:viewAction action="#{sessionBean.guardPage}"/>
+    <ui:insert name="pageMetadata"/>
+</f:metadata>
 <h:body>
-    <f:metadata>
-        <f:viewAction action="#{sessionBean.guardPage}"/>
-    </f:metadata>
 
     <nav class="navbar">
         <span class="brand">PUJ Learning</span>
@@ -20,6 +21,9 @@
         <h:link value="Cursos"       outcome="/views/courses"/>
         <h:link value="Evaluaciones" outcome="/views/assessments"/>
         <h:link value="Foros"        outcome="/views/forums"/>
+        <h:link value="Grupos"       outcome="/views/study-groups"/>
+        <h:link value="Admin"        outcome="/views/admin"
+                rendered="#{sessionBean.hasRole('ADMIN')}"/>
         <span class="user-info">#{sessionBean.userEmail} (#{sessionBean.userRole})</span>
         <h:form>
             <h:commandButton value="Salir" action="#{sessionBean.logout}" styleClass="btn btn-secondary btn-sm"/>

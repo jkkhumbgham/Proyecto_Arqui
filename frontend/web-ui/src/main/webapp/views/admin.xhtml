@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Administración</ui:define>
+<ui:define name="content">
+
+    <h:panelGroup rendered="#{not sessionBean.hasRole('ADMIN')}">
+        <div class="card" style="text-align:center;padding:3rem;color:#888;">
+            <p>Acceso denegado. Solo administradores pueden ver esta página.</p>
+        </div>
+    </h:panelGroup>
+
+    <h:panelGroup rendered="#{sessionBean.hasRole('ADMIN')}">
+
+        <h2 class="page-title">Administración</h2>
+        <h:messages globalOnly="true" styleClass="alert alert-warn" style="margin-bottom:1rem;"/>
+
+        <!-- ===== CREAR USUARIO ===== -->
+        <div class="card" style="margin-bottom:1.5rem;">
+            <h3 style="color:#1a3a6b;margin-top:0;">Crear usuario</h3>
+            <h:form id="createUserForm">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label">Email *</label>
+                        <h:inputText value="#{adminBean.newEmail}" styleClass="form-control"
+                                     style="width:100%;" placeholder="correo@ejemplo.com"/>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label">Nombre</label>
+                        <h:inputText value="#{adminBean.newFirstName}" styleClass="form-control"
+                                     style="width:100%;"/>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label">Apellido</label>
+                        <h:inputText value="#{adminBean.newLastName}" styleClass="form-control"
+                                     style="width:100%;"/>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;align-items:end;">
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label">Contraseña *</label>
+                        <h:inputSecret value="#{adminBean.newPassword}" styleClass="form-control"
+                                       style="width:100%;" redisplay="false"/>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label">Rol</label>
+                        <h:selectOneMenu value="#{adminBean.newRole}" styleClass="form-control" style="width:100%;">
+                            <f:selectItem itemValue="STUDENT"    itemLabel="Estudiante"/>
+                            <f:selectItem itemValue="INSTRUCTOR" itemLabel="Instructor"/>
+                            <f:selectItem itemValue="DIRECTOR"   itemLabel="Director"/>
+                            <f:selectItem itemValue="ADMIN"      itemLabel="Administrador"/>
+                        </h:selectOneMenu>
+                    </div>
+                    <div>
+                        <h:commandButton value="Crear usuario" action="#{adminBean.createUser}"
+                                         styleClass="btn btn-primary" style="width:100%;"/>
+                    </div>
+                </div>
+            </h:form>
+        </div>
+
+        <!-- ===== LISTA DE USUARIOS ===== -->
+        <div class="card" style="margin-bottom:1.5rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                <h3 style="color:#1a3a6b;margin:0;">
+                    Usuarios (#{adminBean.totalUsers} total)
+                </h3>
+                <div style="display:flex;gap:.5rem;">
+                    <h:link value="← Anterior" outcome="/views/admin"
+                            styleClass="btn btn-secondary btn-sm"
+                            rendered="#{adminBean.hasPrev}">
+                        <f:param name="page" value="#{adminBean.prevPage}"/>
+                    </h:link>
+                    <h:link value="Siguiente →" outcome="/views/admin"
+                            styleClass="btn btn-secondary btn-sm"
+                            rendered="#{adminBean.hasNext}">
+                        <f:param name="page" value="#{adminBean.nextPage}"/>
+                    </h:link>
+                </div>
+            </div>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Nombre</th>
+                        <th>Rol</th>
+                        <th>Estado</th>
+                        <th>Último acceso</th>
+                        <th style="text-align:center;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <ui:repeat value="#{adminBean.users}" var="u">
+                        <tr>
+                            <td style="font-size:.875rem;">#{u.email}</td>
+                            <td style="font-size:.875rem;">#{u.firstName} #{u.lastName}</td>
+                            <td>
+                                <span class="badge badge-blue" style="font-size:.75rem;">#{u.role}</span>
+                            </td>
+                            <td>
+                                <span class="badge #{u.active ? 'badge-green' : 'badge-red'}"
+                                      style="font-size:.75rem;">
+                                    #{u.active ? 'Activo' : 'Inactivo'}
+                                </span>
+                            </td>
+                            <td style="font-size:.8rem;color:#888;">#{u.lastLoginAt}</td>
+                            <td>
+                                <div style="display:flex;gap:.4rem;justify-content:center;">
+                                    <h:form style="display:inline;">
+                                        <h:commandButton value="Editar"
+                                                         styleClass="btn btn-primary btn-sm"
+                                                         action="#{adminBean.startEdit(u.id)}"/>
+                                    </h:form>
+                                    <h:form style="display:inline;">
+                                        <h:commandButton value="✕" styleClass="btn btn-secondary btn-sm"
+                                                         style="padding:.25rem .5rem;color:#c0392b;"
+                                                         action="#{adminBean.deleteUser(u.id)}"
+                                                         onclick="return confirm('¿Eliminar el usuario #{u.email}?')"/>
+                                    </h:form>
+                                </div>
+                            </td>
+                        </tr>
+                    </ui:repeat>
+                </tbody>
+            </table>
+
+            <h:panelGroup rendered="#{empty adminBean.users}">
+                <p style="text-align:center;color:#888;padding:1rem;">No hay usuarios.</p>
+            </h:panelGroup>
+        </div>
+
+        <!-- ===== PANEL EDICIÓN ===== -->
+        <h:panelGroup rendered="#{adminBean.editUserId != null}">
+            <div class="card" style="margin-bottom:1.5rem;border:2px solid #1a3a6b;">
+                <h3 style="color:#1a3a6b;margin-top:0;">
+                    Editando usuario: <span style="font-weight:normal;">#{adminBean.editEmail}</span>
+                </h3>
+                <h:form id="editUserForm">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">
+                        <div class="form-group" style="margin:0;">
+                            <label class="form-label">Nombre</label>
+                            <h:inputText value="#{adminBean.editFirstName}" styleClass="form-control"
+                                         style="width:100%;"/>
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label class="form-label">Apellido</label>
+                            <h:inputText value="#{adminBean.editLastName}" styleClass="form-control"
+                                         style="width:100%;"/>
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label class="form-label">Nueva contraseña <span style="color:#999;font-size:.8rem;">(dejar vacío para no cambiar)</span></label>
+                            <h:inputSecret value="#{adminBean.editPassword}" styleClass="form-control"
+                                           style="width:100%;" redisplay="false"/>
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label class="form-label">Rol</label>
+                            <h:selectOneMenu value="#{adminBean.editRole}" styleClass="form-control"
+                                             style="width:100%;">
+                                <f:selectItem itemValue="STUDENT"    itemLabel="Estudiante"/>
+                                <f:selectItem itemValue="INSTRUCTOR" itemLabel="Instructor"/>
+                                <f:selectItem itemValue="DIRECTOR"   itemLabel="Director"/>
+                                <f:selectItem itemValue="ADMIN"      itemLabel="Administrador"/>
+                            </h:selectOneMenu>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:.75rem;">
+                        <h:commandButton value="Guardar cambios" action="#{adminBean.saveUser}"
+                                         styleClass="btn btn-primary"/>
+                        <h:commandButton value="Cancelar" action="#{adminBean.cancelEdit}"
+                                         styleClass="btn btn-secondary" immediate="true"/>
+                    </div>
+                </h:form>
+            </div>
+        </h:panelGroup>
+
+        <!-- ===== HEALTH CHECKS ===== -->
+        <div class="card">
+            <h3 style="color:#1a3a6b;margin-top:0;">Estado de servicios</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Servicio</th>
+                        <th style="text-align:center;">Estado</th>
+                        <th style="text-align:right;">Tiempo de respuesta</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <ui:repeat value="#{adminBean.healthChecks}" var="hc">
+                        <tr>
+                            <td>#{hc.service}</td>
+                            <td style="text-align:center;">
+                                <span class="badge #{hc.up ? 'badge-green' : 'badge-red'}">#{hc.status}</span>
+                            </td>
+                            <td style="text-align:right;font-size:.875rem;color:#666;">#{hc.responseMs} ms</td>
+                        </tr>
+                    </ui:repeat>
+                </tbody>
+            </table>
+        </div>
+
+    </h:panelGroup>
+
+</ui:define>
+</ui:composition>
+</html>

@@ -10,6 +10,7 @@ COPY services/user-service/pom.xml services/user-service/pom.xml
 COPY services/course-service/pom.xml       services/course-service/pom.xml
 COPY services/assessment-service/pom.xml   services/assessment-service/pom.xml
 COPY services/collaboration-service/pom.xml services/collaboration-service/pom.xml
+COPY services/email-service/pom.xml       services/email-service/pom.xml
 COPY frontend/web-ui/pom.xml   frontend/web-ui/pom.xml
 
 RUN mvn dependency:go-offline -pl libs/security,libs/events,services/user-service -am -q
@@ -51,6 +52,9 @@ RUN /opt/jboss/wildfly/bin/add-user.sh admin admin_secret --silent && \
 # Deploy WAR
 COPY --from=builder /build/services/user-service/target/user-service.war \
     /opt/jboss/wildfly/standalone/deployments/ROOT.war
+
+# El paso de configuración crea archivos como root; se los devuelve a jboss
+RUN chown -R jboss:jboss /opt/jboss/wildfly/standalone
 
 USER jboss
 EXPOSE 8080 9990

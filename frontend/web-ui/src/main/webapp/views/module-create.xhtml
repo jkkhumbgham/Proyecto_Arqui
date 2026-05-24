@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Nuevo módulo</ui:define>
+<ui:define name="content">
+
+    <h:link value="← Volver al curso" outcome="/views/course-detail" styleClass="btn btn-secondary btn-sm"
+            style="margin-bottom:1rem;display:inline-block;">
+        <f:param name="courseId" value="#{instructorBean.courseId}"/>
+    </h:link>
+
+    <h2 class="page-title">Agregar módulo</h2>
+
+    <div class="card" style="max-width:600px;">
+        <h:form>
+            <h:inputHidden value="#{instructorBean.courseId}"/>
+            <div class="form-group">
+                <label class="form-label">Título del módulo *</label>
+                <h:inputText value="#{instructorBean.newModuleTitle}" styleClass="form-control"
+                             style="width:100%;" placeholder="Ej: Introducción a la programación"/>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Descripción</label>
+                <h:inputTextarea value="#{instructorBean.newModuleDescription}" rows="3"
+                                 styleClass="form-control" style="width:100%;"
+                                 placeholder="Breve descripción del módulo"/>
+            </div>
+            <div style="display:flex;gap:1rem;margin-top:1rem;">
+                <h:link value="Cancelar" outcome="/views/course-detail" styleClass="btn btn-secondary">
+                    <f:param name="courseId" value="#{instructorBean.courseId}"/>
+                </h:link>
+                <h:commandButton value="Crear módulo" action="#{instructorBean.createModule}"
+                                 styleClass="btn btn-primary"/>
+            </div>
+        </h:form>
+    </div>
+
+</ui:define>
+</ui:composition>
+</html>

@@ -24,6 +24,8 @@ public class LoginBean {
 
     private String email;
     private String password;
+    private String firstName;
+    private String lastName;
     private boolean consentGiven;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -71,8 +73,11 @@ public class LoginBean {
     public String register() {
         try {
             String body = String.format(
-                    "{\"email\":\"%s\",\"password\":\"%s\",\"role\":\"STUDENT\",\"consentGiven\":%b}",
-                    email, password, consentGiven);
+                    "{\"email\":\"%s\",\"password\":\"%s\",\"firstName\":\"%s\",\"lastName\":\"%s\",\"consentGiven\":%b}",
+                    email, password,
+                    firstName  != null ? firstName  : "",
+                    lastName   != null ? lastName   : "",
+                    consentGiven);
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(USER_SERVICE_URL + "/api/v1/auth/register"))
                     .header("Content-Type", "application/json")
@@ -106,10 +111,14 @@ public class LoginBean {
         return null;
     }
 
-    public String getEmail()           { return email; }
-    public void   setEmail(String e)   { this.email = e; }
-    public String getPassword()        { return password; }
-    public void   setPassword(String p){ this.password = p; }
-    public boolean isConsentGiven()    { return consentGiven; }
+    public String getEmail()                  { return email; }
+    public void   setEmail(String e)          { this.email = e; }
+    public String getPassword()               { return password; }
+    public void   setPassword(String p)       { this.password = p; }
+    public String getFirstName()              { return firstName; }
+    public void   setFirstName(String f)      { this.firstName = f; }
+    public String getLastName()               { return lastName; }
+    public void   setLastName(String l)       { this.lastName = l; }
+    public boolean isConsentGiven()           { return consentGiven; }
     public void    setConsentGiven(boolean c) { this.consentGiven = c; }
 }

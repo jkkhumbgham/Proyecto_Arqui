@@ -4,11 +4,11 @@
       xmlns:f="jakarta.faces.core"
       xmlns:ui="jakarta.faces.facelets">
 <ui:composition template="/WEB-INF/templates/layout.xhtml">
+<f:metadata>
+    <f:viewAction action="#{loginBean.redirectIfAuthenticated}"/>
+</f:metadata>
 <ui:define name="pageTitle">Inicio</ui:define>
 <ui:define name="body">
-    <f:metadata>
-        <f:viewAction action="#{loginBean.redirectIfAuthenticated}"/>
-    </f:metadata>
     <div class="login-page">
         <div class="login-box" style="text-align:center;">
             <div class="logo">

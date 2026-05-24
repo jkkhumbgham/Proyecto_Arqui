@@ -8,13 +8,20 @@
 1. [Requisitos previos](#1-requisitos-previos)
 2. [Configuración inicial (solo una vez)](#2-configuración-inicial-solo-una-vez)
 3. [Correr en local (Docker Compose)](#3-correr-en-local-docker-compose)
-4. [Ver la UI web](#4-ver-la-ui-web)
-5. [Inspeccionar la base de datos](#5-inspeccionar-la-base-de-datos)
-6. [Correr en Kubernetes (EKS)](#6-correr-en-kubernetes-eks)
-7. [Del local a producción (SAD/SRS)](#7-del-local-a-producción-sadsrs)
-8. [Probar el sistema comando a comando](#8-probar-el-sistema-comando-a-comando)
-9. [Ejecutar los tests unitarios](#9-ejecutar-los-tests-unitarios)
-10. [Mapa de puertos (local)](#10-mapa-de-puertos-local)
+4. [Correr en local (Minikube)](#4-correr-en-local-minikube)
+5. [Ver la UI web](#5-ver-la-ui-web)
+6. [Inspeccionar la base de datos](#6-inspeccionar-la-base-de-datos)
+7. [Kubernetes con registry gratuito (ghcr.io + minikube)](#7-kubernetes-con-registry-gratuito-ghcrio--minikube)
+8. [Diferencias local vs producción (SAD/SRS)](#8-diferencias-local-vs-producción-sadsrs)
+9. [Probar el sistema comando a comando](#9-probar-el-sistema-comando-a-comando)
+   - 9.1 Registro e inicio de sesión
+   - 9.10 Búsqueda con caché Redis
+   - 9.11 Gamificación
+   - 9.12 Certificados
+   - 9.13 Notificaciones in-app
+   - 9.14 Rutas de aprendizaje
+10. [Ejecutar los tests unitarios](#10-ejecutar-los-tests-unitarios)
+11. [Mapa de puertos (local)](#11-mapa-de-puertos-local)
 
 ---
 
@@ -27,7 +34,6 @@
 | Maven | 3.9 | Build Java fuera de Docker |
 | .NET SDK | 8.0 | Compilar analytics-service si no usas Docker |
 | kubectl | 1.28 | Desplegar en Kubernetes |
-| AWS CLI | 2.x | Login a ECR para producción |
 | openssl | cualquiera | Generar par RSA para JWT (lo usa setup-env.sh) |
 
 ---
@@ -58,20 +64,15 @@ La salida se ve así:
 ══════════════════════════════════════════════════════════
   Rellena manualmente en .env antes de hacer docker compose up:
 
-  ✗ AWS_ACCESS_KEY_ID  ← pendiente
-  ✗ AWS_SECRET_ACCESS_KEY  ← pendiente
-  ✗ REGISTRY  ← pendiente
+  ✗ REGISTRY  ← pendiente (ghcr.io, solo para Kubernetes)
   ✓ SMTP_HOST
-  ✗ SMTP_USER  ← pendiente
-  ✗ SMTP_PASSWORD  ← pendiente
 ══════════════════════════════════════════════════════════
 ```
 
-Las variables de AWS y SMTP son opcionales para desarrollo local:
+Las variables de SMTP son opcionales para desarrollo local:
 
-- **AWS**: solo necesaria para el upload de materiales a S3. Sin ella, los endpoints de upload fallan pero todo lo demás funciona.
-- **REGISTRY**: solo necesaria para hacer push a ECR. En local no se usa.
-- **SMTP**: en local el email-service usa MailHog automáticamente (SMTP_HOST no tiene efecto si el contenedor apunta a `mailhog:1025` internamente).
+- **SMTP**: en local el email-service usa MailHog automáticamente (el contenedor apunta a `mailhog:1025` internamente, no requiere configuración).
+- **REGISTRY**: solo necesaria para hacer push a ghcr.io. En local no se usa.
 
 Si en algún momento necesitas regenerar las claves (ej: rotación de seguridad), borra las líneas `JWT_PRIVATE_KEY` y `JWT_PUBLIC_KEY` del `.env` y vuelve a ejecutar el script.
 
@@ -136,7 +137,81 @@ docker compose down -v         # para Y borra los datos (postgres, redis, rabbit
 
 ---
 
-## 4. Ver la UI web
+## 4. Correr en local (Minikube)
+
+Minikube levanta un cluster Kubernetes de un nodo en tu máquina. Permite validar los manifiestos de `infra/k8s/` — los mismos que se usan en producción con EKS — sin necesidad de una cuenta en AWS.
+
+### 4.1 Prerrequisitos
+
+| Herramienta | Versión mínima | Instalación |
+|---|---|---|
+| Docker | 24+ | https://docs.docker.com/get-docker/ |
+| minikube | 1.32+ | https://minikube.sigs.k8s.io/docs/start/ |
+| kubectl | 1.28+ | https://kubernetes.io/docs/tasks/tools/ |
+
+No necesitas Maven, .NET SDK ni ninguna otra herramienta: los Dockerfiles hacen el build completo internamente.
+
+Asegúrate también de haber ejecutado `bash scripts/setup-env.sh` al menos una vez para tener `jwt_private.pem` y `jwt_public.pem` en la raíz.
+
+### 4.2 Levantar todo con un solo comando
+
+```bash
+bash scripts/local-k8s.sh
+```
+
+El script hace todo automáticamente:
+
+1. Inicia minikube con 4 CPUs y 6 GB de RAM (driver Docker)
+2. Habilita el addon `ingress` (nginx)
+3. Construye las 7 imágenes Docker **dentro del daemon de minikube** con `eval $(minikube docker-env)`
+4. Crea el namespace `puj-platform` y el Secret `platform-secrets` con valores locales
+5. Aplica el overlay `infra/k8s/overlays/local/` (ajusta StorageClass, imagePullPolicy, Ingress y SMTP)
+6. Espera a que todos los pods estén `Running`
+7. Añade `platform.local` a `/etc/hosts` apuntando a la IP de minikube
+
+> **Primera ejecución**: puede tardar 10–15 minutos porque Maven y el SDK de .NET corren dentro de Docker descargando dependencias. Las siguientes ejecuciones son mucho más rápidas gracias a la caché de capas.
+
+### 4.3 Acceder a los servicios
+
+Una vez que el script termina:
+
+| Servicio | Cómo acceder |
+|---|---|
+| UI web | http://platform.local |
+| MailHog (correos) | `kubectl port-forward svc/mailhog 8025:8025 -n puj-platform` → http://localhost:8025 |
+| RabbitMQ management | `kubectl port-forward svc/rabbitmq 15672:15672 -n puj-platform` → http://localhost:15672 |
+
+### 4.4 Diferencias respecto a docker compose
+
+| Aspecto | docker compose | Minikube |
+|---|---|---|
+| Base de datos | PostgreSQL directo (5432) | PostgreSQL + PgBouncer sidecar (6432) |
+| StorageClass | N/A | `standard` (minikube) en lugar de `gp2` (AWS) |
+| Ingress | Sin Ingress — acceso por puerto | nginx Ingress Controller |
+| imagePullPolicy | N/A | `Never` — imágenes locales en minikube |
+| SMTP | MailHog vía docker network | MailHog desplegado en el mismo namespace K8s |
+| Réplicas | 1 por servicio | 1–2 según el HPA (limitado por los 6 GB asignados) |
+
+### 4.5 Comandos útiles
+
+```bash
+# Ver estado de todos los pods
+kubectl get pods -n puj-platform
+
+# Logs de un servicio
+kubectl logs -n puj-platform deployment/user-service --follow
+
+# Ver el ingress y su IP
+kubectl get ingress -n puj-platform
+
+# Destruir todo y liberar recursos
+kubectl delete namespace puj-platform
+minikube stop
+```
+
+---
+
+## 5. Ver la UI web
 
 La UI está en **http://localhost:8080**. Es una aplicación JSF (server-side rendering): el servidor genera el HTML completo, el browser no llama a ningún API directamente.
 
@@ -146,52 +221,49 @@ Hay cuatro roles en el sistema. Lo que se muestra en pantalla cambia completamen
 
 #### STUDENT (el flujo principal)
 
-1. Ve al formulario de registro en `/register.xhtml`.
-2. Rellena email, contraseña y **marca la casilla de consentimiento** (obligatoria por Ley 1581 — sin ella el botón no habilitará el envío).
-3. Tras registrarse, abre **http://localhost:8025** (MailHog) — llegó el correo de bienvenida con el aviso de privacidad.
-4. Inicia sesión en `/login.xhtml` → redirige a `/dashboard.xhtml`.
-5. Dashboard de estudiante muestra:
-   - Cursos inscritos con su progreso (% de lecciones completadas).
-   - Evaluaciones pendientes.
-   - Notificaciones del motor adaptativo (si hay recomendaciones de refuerzo).
-6. Desde `/courses.xhtml` puede explorar el catálogo e inscribirse. El correo de confirmación de inscripción llega en segundos a MailHog.
-7. Al completar una evaluación con nota < umbral configurado, aparece un banner amarillo con el material de refuerzo recomendado.
-8. Desde `/groups.xhtml` puede crear o unirse a grupos de estudio y chatear en tiempo real.
+1. Registro en `/views/register` — marcar la casilla de consentimiento (Ley 1581).
+2. Tras registrarse, abrir **http://localhost:8025** (MailHog) para ver el correo de bienvenida.
+3. Iniciar sesión → redirige al dashboard de estudiante.
+4. Dashboard muestra: cursos inscritos con progreso, rutas de aprendizaje y botones de acceso rápido.
+5. Desde `/views/courses` explorar el catálogo, usar la búsqueda por texto o categoría, e inscribirse.
+6. Desde `/views/learning-paths` ver e inscribirse en rutas de aprendizaje.
+7. Al completar lecciones y aprobar evaluaciones se acumulan puntos y se desbloquean insignias.
+8. Al aprobar todas las evaluaciones de un curso se genera automáticamente un certificado PDF descargable desde `/views/certificates`.
+9. Las notificaciones in-app llegan automáticamente (lección completada, certificado listo, etc.).
 
 #### INSTRUCTOR
 
-1. Registra cuenta y pide a un ADMIN que cambie su rol (o el ADMIN lo crea directamente).
-2. Inicia sesión → `/instructor/dashboard.xhtml`:
-   - Lista de cursos que imparte.
-   - Botón "Nuevo curso" → formulario con título, descripción y capacidad máxima.
-3. Dentro de un curso puede agregar módulos, lecciones y evaluaciones.
-4. Para cada evaluación configura el umbral adaptativo: el porcentaje mínimo y qué lección mostrar si el estudiante no lo alcanza.
+1. El ADMIN asigna el rol. El instructor inicia sesión y va al dashboard.
+2. Dashboard muestra sus cursos (DRAFT / PUBLISHED) con acceso directo a gestión.
+3. Crea cursos con categoría → módulos → lecciones → contenidos (texto/video/PDF).
+4. Crea rutas de aprendizaje desde `/views/learning-path-create` (selecciona cursos en orden).
+5. Construye evaluaciones desde `/views/assessment-builder?courseId=…`.
+6. Configura el umbral adaptativo: porcentaje mínimo y lección de refuerzo si no lo alcanza.
 
 #### DIRECTOR
 
-1. Solo puede ver, no modificar cursos ni usuarios.
-2. Su página de inicio es `/analytics/dashboard.xhtml`:
-   - Tarjetas con totales: usuarios activos, inscripciones, tasa de aprobación.
-   - Tabla de cursos más populares.
-   - Botones para descargar CSV y PDF de los reportes.
+1. Solo lectura — no puede modificar cursos ni usuarios.
+2. Dashboard muestra estadísticas globales: usuarios activos, inscripciones, tasa de aprobación, ranking de cursos.
+3. Puede descargar reportes CSV y PDF del analytics-service.
 
 #### ADMIN
 
-1. Acceso a `/admin/users.xhtml`:
-   - Lista de todos los usuarios con su rol actual.
-   - Puede cambiar el rol de cualquier usuario (STUDENT ↔ INSTRUCTOR ↔ DIRECTOR ↔ ADMIN).
-   - Puede desbloquear cuentas bloqueadas por intentos fallidos.
+1. Dashboard muestra las mismas estadísticas que el DIRECTOR más las herramientas de gestión.
+2. En el panel de usuarios puede cambiar roles (STUDENT ↔ INSTRUCTOR ↔ DIRECTOR ↔ ADMIN).
+3. Acceso a todos los cursos y foros independientemente del instructor.
 
 ### URLs de la UI
 
 ```
-http://localhost:8080/register.xhtml               → Registro con consentimiento
-http://localhost:8080/login.xhtml                  → Inicio de sesión
-http://localhost:8080/dashboard.xhtml              → Dashboard según rol
-http://localhost:8080/courses.xhtml                → Catálogo de cursos
-http://localhost:8080/groups.xhtml                 → Grupos de estudio y chat
-http://localhost:8080/analytics/dashboard.xhtml    → Solo DIRECTOR/ADMIN
-http://localhost:8080/admin/users.xhtml            → Solo ADMIN
+http://localhost:8080/views/login               → Inicio de sesión
+http://localhost:8080/views/register            → Registro con consentimiento
+http://localhost:8080/views/dashboard           → Dashboard según rol
+http://localhost:8080/views/courses             → Catálogo con búsqueda
+http://localhost:8080/views/learning-paths      → Rutas de aprendizaje
+http://localhost:8080/views/assessments         → Evaluaciones del estudiante
+http://localhost:8080/views/forums              → Foros colaborativos
+http://localhost:8080/views/profile             → Perfil, puntos e insignias
+http://localhost:8080/views/certificates        → Mis certificados (STUDENT)
 ```
 
 ### Ver los correos que llegan
@@ -208,7 +280,7 @@ Cada acción importante dispara un correo. En desarrollo local todos caen en **M
 
 ---
 
-## 5. Inspeccionar la base de datos
+## 6. Inspeccionar la base de datos
 
 PostgreSQL corre en `localhost:5432`. Usuario `puj_admin`, contraseña `postgres_secret` (como está en `.env`).
 
@@ -216,10 +288,10 @@ PostgreSQL corre en `localhost:5432`. Usuario `puj_admin`, contraseña `postgres
 
 ```bash
 # Opción 1: psql dentro del contenedor (sin instalar psql localmente)
-docker compose exec postgres psql -U puj_admin -d puj_platform
+docker compose exec postgres psql -U puj_admin -d learning_platform
 
 # Opción 2: psql local si lo tienes instalado
-psql -h localhost -p 5432 -U puj_admin -d puj_platform
+psql -h localhost -p 5432 -U puj_admin -d learning_platform
 ```
 
 ### Schemas y tablas principales
@@ -344,83 +416,121 @@ docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers
 
 | Cola | Qué contiene |
 |---|---|
+| `analytics.results` | Eventos de calificaciones, inscripciones y registros para métricas |
+| `gamification.events` | Eventos de lecciones, evaluaciones y foros para otorgar puntos |
+| `notifications.events` | Eventos para generar notificaciones in-app del estudiante |
 | `email.notifications` | Correos pendientes de enviar |
-| `analytics.results` | Eventos de calificaciones para agregar |
 | `dead.letter.queue` | Mensajes que fallaron después de 3 reintentos |
 
 ---
 
-## 6. Correr en Kubernetes (EKS)
+## 7. Kubernetes con registry gratuito (ghcr.io + minikube)
 
-### 6.1 Build y push de imágenes
+Esta sección complementa §4: en lugar de construir las imágenes *dentro* del daemon de minikube (`imagePullPolicy: Never`), las sube a **GitHub Container Registry (ghcr.io)**, que es completamente gratuito, y luego minikube las descarga. Esto valida el flujo real de pull de imágenes sin pagar nada.
 
-Asegúrate de tener `REGISTRY` configurado en `.env`:
+**Cuándo usar §4 vs §7**
+
+| | §4 — minikube sin registry | §7 — minikube + ghcr.io |
+|---|---|---|
+| Registry | Ninguno (imágenes solo en minikube) | ghcr.io (gratuito) |
+| Requiere cuenta | No | Sí (GitHub, gratuita) |
+| Valida el pull de imágenes | No | Sí |
+| Primera ejecución | ~10 min | ~15 min |
+
+### 7.1 Prerrequisitos
+
+| Herramienta | Cómo obtenerla | Costo |
+|---|---|---|
+| minikube | https://minikube.sigs.k8s.io/docs/start/ | Gratis |
+| kubectl | https://kubernetes.io/docs/tasks/tools/ | Gratis |
+| Docker | https://docs.docker.com/get-docker/ | Gratis |
+| Cuenta GitHub | https://github.com/join | Gratis |
+| Personal Access Token (PAT) | GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → New token → scope: `write:packages` | Gratis |
+
+### 7.2 Configurar el registry
+
+En `.env`, añade tu usuario de GitHub:
 
 ```bash
-# Editar .env y llenar:
-# REGISTRY=123456789.dkr.ecr.us-east-1.amazonaws.com
+REGISTRY=ghcr.io/tu-usuario-github
 ```
 
-Luego un solo comando construye y sube las 7 imágenes:
+Luego edita `infra/k8s/overlays/registry/kustomization.yaml` y reemplaza `TU_USUARIO` con tu usuario real de GitHub (son 7 líneas `newName`).
+
+Login al registry (solo una vez, el token se guarda en `~/.docker/config.json`):
+
+```bash
+# Sustituye TU_USUARIO y TU_PAT por los valores reales
+echo "TU_PAT" | docker login ghcr.io -u TU_USUARIO --password-stdin
+```
+
+### 7.3 Build y push de imágenes
 
 ```bash
 bash scripts/ecr-push.sh
 ```
 
-Para publicar con un tag específico (ej: para una release):
+Para un tag específico (útil para versionado):
 
 ```bash
-bash scripts/ecr-push.sh v1.2.0
+bash scripts/ecr-push.sh v1.0.0
 ```
 
-El script hace automáticamente:
-- Login a ECR con `aws ecr get-login-password` (extrae la región del URL del registry).
-- Build de las 7 imágenes con `--build-arg BUILDKIT_INLINE_CACHE=1`.
-- Push con el tag especificado y también con `:latest`.
-- Sustituye el placeholder `REGISTRY` en todos los `deployment.yaml` de `infra/k8s/`.
+El script construye las 7 imágenes y las sube a `ghcr.io/tu-usuario/puj/<servicio>:latest`.
 
-### 6.2 Crear secretos reales (no commitear en git)
+> **Imágenes privadas vs públicas:** por defecto ghcr.io crea las imágenes como privadas. Para este proyecto de demo puedes hacerlas públicas en GitHub → tu perfil → Packages → selecciona el paquete → Package settings → Change visibility → Public. Con imágenes públicas no necesitas imagePullSecret en el cluster.
+
+### 7.4 Levantar minikube y desplegar
 
 ```bash
+# Iniciar minikube (si no está corriendo)
+minikube start --cpus=4 --memory=6144 --driver=docker
+minikube addons enable ingress
+
+# Namespace y secretos
+kubectl apply -f infra/k8s/namespace.yaml
 kubectl create secret generic platform-secrets \
   --namespace puj-platform \
   --from-literal=DB_USER=puj_admin \
-  --from-literal=DB_PASSWORD=tu_password \
-  --from-literal=REDIS_PASSWORD=tu_redis_pass \
+  --from-literal=DB_PASSWORD=puj_secret \
+  --from-literal=REDIS_PASSWORD=redis_secret \
   --from-literal=RABBITMQ_USER=puj_rabbit \
-  --from-literal=RABBITMQ_PASSWORD=tu_rabbit_pass \
+  --from-literal=RABBITMQ_PASSWORD=rabbit_secret \
   --from-literal=JWT_PRIVATE_KEY="$(cat jwt_private.pem)" \
   --from-literal=JWT_PUBLIC_KEY="$(cat jwt_public.pem)" \
-  --from-literal=AWS_ACCESS_KEY_ID=AKIA... \
-  --from-literal=AWS_SECRET_ACCESS_KEY=... \
-  --from-literal=SMTP_HOST=smtp.puj.edu.co \
-  --from-literal=SMTP_PORT=587 \
-  --from-literal=SMTP_USER=no-reply@puj.edu.co \
-  --from-literal=SMTP_PASSWORD=tu_smtp_pass
+  --from-literal=AWS_ACCESS_KEY_ID=local-dummy \
+  --from-literal=AWS_SECRET_ACCESS_KEY=local-dummy \
+  --from-literal=SMTP_HOST=mailhog \
+  --from-literal=SMTP_PORT=1025 \
+  --from-literal=SMTP_USER="" \
+  --from-literal=SMTP_PASSWORD="" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Desplegar con el overlay de registry
+kubectl apply -k infra/k8s/overlays/registry/
 ```
 
-> `jwt_private.pem` y `jwt_public.pem` los generó `setup-env.sh` en la raíz del repositorio.
+> Si las imágenes son **privadas** en ghcr.io, crea también un imagePullSecret antes de desplegar:
+> ```bash
+> kubectl create secret docker-registry ghcr-secret \
+>   --namespace puj-platform \
+>   --docker-server=ghcr.io \
+>   --docker-username=TU_USUARIO \
+>   --docker-password=TU_PAT
+> ```
+> Luego añade `imagePullSecrets: [{name: ghcr-secret}]` a cada Deployment, o simplemente haz públicas las imágenes (más sencillo para un proyecto de demo).
 
-### 6.3 Desplegar todo con un solo comando
+### 7.5 Verificar el despliegue
 
 ```bash
-kubectl apply -k infra/k8s/
-```
-
-El orden de aplicación lo controla `kustomization.yaml`:
-namespace → secrets → configmaps → postgres (con PgBouncer) → redis → rabbitmq → servicios → ingress.
-
-### 6.4 Verificar el despliegue
-
-```bash
-# Ver que todos los pods arranquen
+# Ver que todos los pods arranquen (minikube descarga las imágenes de ghcr.io)
 kubectl get pods -n puj-platform -w
 
-# Ver el estado de los HPAs
-kubectl get hpa -n puj-platform
+# Ver la IP de minikube
+minikube ip
 
-# Ver la IP del load balancer (puede tardar 1-2 min en asignarse)
-kubectl get ingress -n puj-platform
+# Acceder a la UI (si platform.local ya está en /etc/hosts desde §4)
+# http://platform.local
 
 # Logs de un servicio
 kubectl logs -n puj-platform deployment/user-service --follow
@@ -428,69 +538,54 @@ kubectl logs -n puj-platform deployment/user-service --follow
 
 ---
 
-## 7. Del local a producción (SAD/SRS)
+## 8. Diferencias local vs producción (SAD/SRS)
 
-Esta sección describe qué cambia entre el entorno local (`docker compose`) y el despliegue planteado en el SAD/SRS (AWS EKS), y qué pasos adicionales hay que ejecutar.
+Esta sección documenta qué cambia entre el entorno local (Docker Compose / minikube) y el despliegue de producción descrito en el SAD/SRS. Es una referencia para cuando el proyecto llegue a producción — **no requiere ningún servicio de pago para desarrollar o demostrar el sistema**.
 
-### 7.1 Qué es diferente
+### 8.1 Qué es diferente
 
-| Aspecto | Local | Producción |
+| Aspecto | Local (gratis) | Producción (pagada) |
 |---|---|---|
-| Base de datos | PostgreSQL directo en contenedor (puerto 5432) | PostgreSQL 15 + PgBouncer sidecar (puerto 6432) |
-| Conexiones DB | Directas desde cada servicio | Pool de conexiones vía PgBouncer en modo `transaction` |
-| Correo | MailHog local sin auth ni TLS (puerto 1025) | SMTP institucional con `SMTP_AUTH=true` y `SMTP_STARTTLS=true` (puerto 587) |
-| Archivos de curso | S3 no disponible; endpoints de upload fallan | AWS S3 con URLs prefirmadas (15 min PUT, 1 h GET) |
-| HTTPS / dominio | Sin TLS, acceso directo por puertos | AWS ALB + ACM certificate en `platform.puj.edu.co` |
-| Escalado | 1 réplica por servicio | HPA: 2–8 réplicas por CPU; `terminationGracePeriodSeconds: 60` en collaboration-service |
-| Secretos | Archivo `.env` en la máquina local | Kubernetes Secret `platform-secrets` en namespace `puj-platform` |
-| Imágenes Docker | Build local por docker compose | Build + push a ECR con `scripts/ecr-push.sh` |
-| Sticky sessions (JSF) | Innecesario con 1 réplica | `sessionAffinity: ClientIP` en el Service de web-ui |
-| WebSocket multi-réplica | Un único pod, coordinación innecesaria | Redis Pub/Sub coordina mensajes entre pods de collaboration-service |
+| Cluster K8s | minikube en tu máquina | AWS EKS u otro proveedor |
+| Registry de imágenes | ghcr.io (gratis) o daemon de minikube | ECR, ghcr.io, Docker Hub, etc. |
+| Base de datos | PostgreSQL directo (puerto 5432) | PostgreSQL 15 + PgBouncer sidecar (puerto 6432) |
+| Correo | MailHog local, sin auth ni TLS | SMTP real con `SMTP_AUTH=true` y `SMTP_STARTTLS=true` |
+| Archivos de curso | S3 no disponible; endpoints de upload fallan con error | AWS S3 con URLs prefirmadas |
+| HTTPS / dominio | Sin TLS, acceso por `platform.local` | Certificado TLS en `platform.puj.edu.co` |
+| Escalado | 1 réplica fija por servicio | HPA: 2–8 réplicas según CPU |
+| Secretos | Archivo `.env` local | Kubernetes Secret `platform-secrets` |
+| Sticky sessions (JSF) | Innecesario con 1 réplica | `sessionAffinity: ClientIP` en Service de web-ui |
+| WebSocket multi-réplica | Un único pod, sin coordinación | Redis Pub/Sub coordina entre pods de collaboration-service |
 
-### 7.2 Componentes del SAD que no aplican en local
+### 8.2 Componentes que solo existen en producción
 
-- **PgBouncer**: en local postgres corre directo (puerto 5432). En K8s corre como sidecar en el pod de postgres (puerto 6432); el manifesto `infra/k8s/postgres/deployment.yaml` ya lo incluye.
-- **Redis Pub/Sub para WebSocket**: con 1 réplica en local no se necesita. En K8s, cuando el HPA escala collaboration-service a 2+ pods, los mensajes de WebSocket se enrutan entre pods vía Redis.
-- **HPA y `terminationGracePeriodSeconds: 60`**: solo tienen efecto con múltiples réplicas en K8s.
-- **Disponibilidad 99.5%**: requiere HPA + readiness probes (ya configurados) + RDS Multi-AZ o un PVC `ReadWriteOnce`.
-- **Cumplimiento Ley 1581**: el consentimiento explícito y el soft-delete funcionan igual en ambos entornos. En producción los datos deben residir en región América (`us-east-1`, ya configurado en los manifiestos).
+- **PgBouncer**: en local postgres escucha directo en 5432. En K8s corre como sidecar (puerto 6432); el manifesto `infra/k8s/postgres/deployment.yaml` ya lo incluye.
+- **Redis Pub/Sub para WebSocket**: con 1 réplica en local no se necesita. En K8s, el HPA puede escalar collaboration-service a 2+ pods y Redis coordina los mensajes.
+- **HPA y `terminationGracePeriodSeconds: 60`**: solo tienen efecto con múltiples réplicas en un cluster real.
+- **Cumplimiento Ley 1581**: consentimiento explícito y soft-delete funcionan igual en ambos entornos. En producción los datos deben residir en `us-east-1` (ya configurado en los manifiestos).
 
-### 7.3 Pasos adicionales para producción
+### 8.3 Qué habría que cambiar para ir a producción
 
-Los pasos de build y push de imágenes y de creación de secretos ya están en [§ 6.1](#61-build-y-push-de-imágenes) y [§ 6.2](#62-crear-secretos-reales-no-commitear-en-git). Lo que hay que agregar a esos pasos:
+Todos estos pasos son opcionales para el desarrollo y demo del proyecto:
 
-**Variables de entorno extra que no existen en local:**
-
-```bash
-# En el secret de K8s añadir también:
---from-literal=SMTP_HOST=smtp.puj.edu.co \
---from-literal=SMTP_PORT=587 \
---from-literal=SMTP_USER=no-reply@puj.edu.co \
---from-literal=SMTP_PASSWORD=<contraseña_smtp>
-```
-
-El email-service K8s ya tiene `SMTP_AUTH=true` y `SMTP_STARTTLS=true` en su Deployment. En local esas variables valen `false` (en `docker-compose.yml`) para ser compatibles con MailHog.
-
-**Configurar dominio e HTTPS:**
-
-Una vez que `kubectl apply -k infra/k8s/` asigne IP al Ingress (~2 min), crear un registro DNS tipo `A` o `CNAME` que apunte `platform.puj.edu.co` a esa IP. El Ingress en `infra/k8s/ingress.yaml` ya tiene la anotación de ACM configurada.
-
-**Verificar que PgBouncer está activo:**
-
-```bash
-# El pod postgres debe tener dos contenedores: pgbouncer + postgres
-kubectl get pods -n puj-platform -l app=postgres
-kubectl describe pod -n puj-platform <nombre-pod-postgres>
-# Buscar: "pgbouncer" y "postgres" en la lista de containers
-```
+1. **Registry**: `scripts/ecr-push.sh` funciona con cualquier registry OCI (ghcr.io, ECR, Docker Hub). En producción basta con apuntar `REGISTRY` al registry del proveedor elegido.
+2. **Secretos reales**: reemplazar los valores dummy del secret de minikube por credenciales reales (SMTP, S3, etc.).
+3. **SMTP real**: el email-service en K8s ya tiene `SMTP_AUTH=true` y `SMTP_STARTTLS=true` en `infra/k8s/email-service/deployment.yaml`. Solo hay que actualizar el secret con el host/usuario/contraseña reales.
+4. **DNS**: apuntar `platform.puj.edu.co` a la IP del Ingress del cluster. El `infra/k8s/ingress.yaml` ya tiene la anotación de certificado configurada.
+5. **Verificar PgBouncer**:
+   ```bash
+   kubectl get pods -n puj-platform -l app=postgres
+   kubectl describe pod -n puj-platform <nombre-pod-postgres>
+   # Debe mostrar dos containers: "postgres" y "pgbouncer"
+   ```
 
 ---
 
-## 8. Probar el sistema comando a comando
+## 9. Probar el sistema comando a comando
 
 Todos los ejemplos apuntan al entorno local (Docker Compose).
 
-### 8.1 Registro e inicio de sesión
+### 9.1 Registro e inicio de sesión
 
 ```bash
 # Registrarse (el consentimiento es obligatorio por Ley 1581)
@@ -515,7 +610,7 @@ echo $TOKEN
 
 Después del registro, abre **http://localhost:8025** (MailHog) y verás el correo de bienvenida.
 
-### 8.2 Verificar bloqueo por intentos fallidos
+### 9.2 Verificar bloqueo por intentos fallidos
 
 ```bash
 # 5 intentos con contraseña incorrecta
@@ -532,7 +627,7 @@ curl -s -X POST http://localhost:8081/api/v1/auth/login \
 # → "Cuenta bloqueada por intentos fallidos..."
 ```
 
-### 8.3 Crear un curso e inscribirse
+### 9.3 Crear un curso e inscribirse
 
 ```bash
 # Crear curso (requiere rol INSTRUCTOR)
@@ -556,7 +651,7 @@ curl -s -X POST "http://localhost:8082/api/v1/enrollments/courses/$COURSE_ID" \
 open http://localhost:8025
 ```
 
-### 8.4 Probar el motor adaptativo
+### 9.4 Probar el motor adaptativo
 
 ```bash
 ASSESSMENT_ID=<uuid-de-una-evaluacion>
@@ -596,7 +691,7 @@ docker compose exec redis redis-cli -a redis_secret \
   DEL "adaptive:rule:$ASSESSMENT_ID"
 ```
 
-### 8.5 Chat en tiempo real (WebSocket)
+### 9.5 Chat en tiempo real (WebSocket)
 
 ```bash
 # Instalar wscat si no lo tienes
@@ -611,7 +706,7 @@ wscat -c "ws://localhost:8084/ws/groups/<group-id>?token=$TOKEN2"
 # Escribir en terminal 1 y ver cómo aparece en terminal 2 en tiempo real
 ```
 
-### 8.6 Dashboard de analítica
+### 9.6 Dashboard de analítica
 
 ```bash
 # Requiere rol DIRECTOR o ADMIN
@@ -622,7 +717,7 @@ curl -s "http://localhost:8085/api/v1/analytics/dashboard/top-courses" \
   -H "Authorization: Bearer $DIRECTOR_TOKEN" | jq
 ```
 
-### 8.7 Exportar reportes
+### 9.7 Exportar reportes
 
 ```bash
 # CSV de cursos
@@ -642,7 +737,7 @@ courseId=$COURSE_ID&from=2026-01-01&to=2026-12-31" \
   -o submissions.csv
 ```
 
-### 8.8 Ver correos enviados (MailHog)
+### 9.8 Ver correos enviados (MailHog)
 
 ```bash
 # Interfaz web
@@ -652,15 +747,105 @@ open http://localhost:8025
 curl -s http://localhost:8025/api/v2/messages | jq '.items[0].Content.Headers.Subject'
 ```
 
-### 8.9 Ver colas de RabbitMQ
+### 9.9 Ver colas de RabbitMQ
 
 ```bash
 open http://localhost:15672
 # Usuario: puj_rabbit / Contraseña: rabbit_secret
-# Ir a Queues → ver mensajes pendientes en analytics.results y email.notifications
+# Ir a Queues → ver mensajes pendientes
 ```
 
-### 8.10 Simular fallo de Redis (fallback adaptativo)
+### 9.10 Probar búsqueda con caché Redis
+
+```bash
+# Buscar cursos por texto
+curl -s "http://localhost:8082/api/v1/search?q=java&sort=newest&page=0&size=12" \
+  -H "Authorization: Bearer $TOKEN" | jq '.total, .data[0].title'
+
+# Buscar por categoría
+curl -s "http://localhost:8082/api/v1/search?category=programacion" \
+  -H "Authorization: Bearer $TOKEN" | jq '.total'
+
+# Ver la clave en Redis (TTL 300s)
+docker compose exec redis redis-cli KEYS "search:*"
+docker compose exec redis redis-cli TTL "search:java::newest:0:12"
+```
+
+### 9.11 Probar gamificación
+
+```bash
+# Ver puntos de un usuario
+curl -s "http://localhost:8081/api/v1/users/me/points" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Ver insignias
+curl -s "http://localhost:8081/api/v1/users/me/badges" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Ver reglas en base de datos
+docker compose exec postgres psql -U puj_admin -d learning_platform \
+  -c "SELECT action_type, points FROM users.gamification_rules ORDER BY points DESC;"
+```
+
+### 9.12 Probar certificados
+
+```bash
+# Ver certificados de un estudiante
+STUDENT_TOKEN=$(curl -s -X POST http://localhost:8081/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"andres.mora@puj.edu.co","password":"Estudiante1!"}' \
+  | jq -r '.accessToken')
+
+STUDENT_ID=$(curl -s -X POST http://localhost:8081/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"andres.mora@puj.edu.co","password":"Estudiante1!"}' \
+  | jq -r '.user.id')
+
+curl -s "http://localhost:8085/api/v1/certificates/student/$STUDENT_ID" \
+  -H "Authorization: Bearer $STUDENT_TOKEN" | jq '.[0].courseTitle'
+
+# Verificar un certificado por código (público)
+VERIFICATION_CODE="<uuid-del-certificado>"
+curl -s "http://localhost:8085/api/v1/certificates/verify/$VERIFICATION_CODE" | jq
+
+# Listar certificados en MinIO
+docker compose exec minio mc ls local/certificates/ --recursive
+```
+
+### 9.13 Probar notificaciones in-app
+
+```bash
+# Ver mis notificaciones
+curl -s "http://localhost:8084/api/v1/notifications" \
+  -H "Authorization: Bearer $TOKEN" | jq '.[0]'
+
+# Contar no leídas
+curl -s "http://localhost:8084/api/v1/notifications/unread-count" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Marcar todas como leídas
+curl -s -X PATCH "http://localhost:8084/api/v1/notifications/read-all" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### 9.14 Probar rutas de aprendizaje
+
+```bash
+# Listar rutas publicadas
+curl -s "http://localhost:8082/api/v1/learning-paths?status=PUBLISHED" \
+  -H "Authorization: Bearer $TOKEN" | jq '.[0].title'
+
+# Inscribirse en una ruta
+PATH_ID="<uuid-de-la-ruta>"
+curl -s -X POST "http://localhost:8082/api/v1/learning-paths/$PATH_ID/enroll" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Ver progreso en la ruta
+curl -s "http://localhost:8082/api/v1/learning-paths/$PATH_ID/progress" \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
+### 9.15 Simular fallo de Redis (fallback adaptativo)
 
 ```bash
 # Parar Redis
@@ -676,7 +861,7 @@ docker compose start redis
 
 ---
 
-## 9. Ejecutar los tests unitarios
+## 10. Ejecutar los tests unitarios
 
 ### Todos los módulos Java de una vez
 
@@ -711,7 +896,7 @@ dotnet test
 
 ---
 
-## 10. Mapa de puertos (local)
+## 11. Mapa de puertos (local)
 
 | Puerto | Servicio | URL |
 |---|---|---|

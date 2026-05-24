@@ -13,7 +13,8 @@ public record UserResponse(
         String  lastName,
         Role    role,
         boolean active,
-        Instant createdAt
+        Instant createdAt,
+        Instant lastLoginAt
 ) {
     public static UserResponse from(User user) {
         return new UserResponse(
@@ -23,7 +24,8 @@ public record UserResponse(
                 user.getLastName(),
                 user.getRole(),
                 user.isActive(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getLastLoginAt()
         );
     }
 }

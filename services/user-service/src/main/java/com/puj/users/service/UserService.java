@@ -1,6 +1,7 @@
 package com.puj.users.service;
 
 import com.puj.security.rbac.Role;
+import com.puj.users.dto.AdminCreateUserRequest;
 import com.puj.users.dto.UpdateUserRequest;
 import com.puj.users.dto.UserResponse;
 import com.puj.users.entity.AuditLog;
@@ -14,6 +15,7 @@ import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import org.mindrot.jbcrypt.BCrypt;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -70,6 +72,39 @@ public class UserService {
         userRepo.save(user);
         auditRepo.save(AuditLog.of(adminId, "ROLE_CHANGE",
                 "/api/v1/users/" + targetId + "/role", ip));
+    }
+
+    @Transactional
+    public UserResponse adminCreate(AdminCreateUserRequest req, UUID adminId, String ip) {
+        if (userRepo.existsByEmail(req.email())) {
+            throw new BadRequestException("El correo electrónico ya está registrado.");
+        }
+
+        Role role;
+        try {
+            role = req.role() != null ? Role.valueOf(req.role().toUpperCase()) : Role.STUDENT;
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("Rol inválido: " + req.role());
+        }
+
+        User user = new User();
+        user.setEmail(req.email().toLowerCase().trim());
+        user.setPasswordHash(BCrypt.hashpw(req.password(), BCrypt.gensalt(12)));
+        user.setFirstName(req.firstName().trim());
+        user.setLastName(req.lastName().trim());
+        user.setRole(role);
+        user.setConsentGiven(req.consentGiven());
+        if (req.consentGiven()) user.setConsentDate(Instant.now());
+        userRepo.save(user);
+
+        auditRepo.save(AuditLog.of(adminId, "ADMIN_CREATE_USER", "/api/v1/users", ip));
+        return UserResponse.from(user);
+    }
+
+    public List<UserResponse> findInactive(int days, int page, int size) {
+        Instant threshold = Instant.now().minusSeconds((long) days * 86400);
+        return userRepo.findInactive(threshold, page, size).stream()
+                .map(UserResponse::from).toList();
     }
 
     @Transactional

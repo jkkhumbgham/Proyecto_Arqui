@@ -79,7 +79,7 @@ public class AuthResource {
         return Response.ok(new UserResponse(
                 java.util.UUID.fromString(authenticatedUser.getUserId()),
                 authenticatedUser.getEmail(), null, null,
-                authenticatedUser.getRole(), true, null
+                authenticatedUser.getRole(), true, null, null
         )).build();
     }
 

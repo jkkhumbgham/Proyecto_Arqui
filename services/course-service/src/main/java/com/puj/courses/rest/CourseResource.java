@@ -2,12 +2,20 @@ package com.puj.courses.rest;
 
 import com.puj.courses.dto.CourseRequest;
 import com.puj.courses.dto.CourseResponse;
+import com.puj.courses.entity.Course;
+import com.puj.courses.entity.Lesson;
+import com.puj.courses.entity.LessonProgress;
+import com.puj.courses.entity.Module;
 import com.puj.courses.service.CourseService;
 import com.puj.security.rbac.AuthenticatedUser;
 import com.puj.security.rbac.RequiresRole;
 import com.puj.security.rbac.Role;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -26,6 +34,9 @@ public class CourseResource {
 
     @Inject private CourseService     courseService;
     @Inject private AuthenticatedUser authenticatedUser;
+
+    @PersistenceContext(unitName = "CourseServicePU")
+    private EntityManager em;
 
     @GET
     @Operation(summary = "Listar cursos publicados")
@@ -87,5 +98,65 @@ public class CourseResource {
         UUID instructorId = UUID.fromString(authenticatedUser.getUserId());
         courseService.delete(id, instructorId);
         return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/{id}/progress")
+    @Transactional
+    @RequiresRole({Role.STUDENT, Role.INSTRUCTOR, Role.ADMIN})
+    @Operation(summary = "Progreso del usuario en un curso")
+    public Response getCourseProgress(@PathParam("id") UUID courseId) {
+        UUID userId = UUID.fromString(authenticatedUser.getUserId());
+
+        List<LessonProgress> progressList = em.createQuery(
+            "SELECT p FROM LessonProgress p WHERE p.userId = :uid AND p.courseId = :cid",
+            LessonProgress.class)
+            .setParameter("uid", userId).setParameter("cid", courseId).getResultList();
+
+        long totalLessons = em.createQuery(
+            "SELECT COUNT(l) FROM Lesson l WHERE l.module.course.id = :cid" +
+            " AND l.deletedAt IS NULL AND l.supplementary = false", Long.class)
+            .setParameter("cid", courseId).getSingleResult();
+
+        List<String> completedIds = progressList.stream()
+                .map(p -> p.getLesson().getId().toString()).toList();
+        long completed = progressList.stream()
+                .filter(p -> !p.getLesson().isSupplementary()).count();
+        double pct = totalLessons > 0 ? (completed * 100.0 / totalLessons) : 0.0;
+
+        return Response.ok(Map.of(
+                "completedLessonIds", completedIds,
+                "completedCount",     completed,
+                "totalLessons",       totalLessons,
+                "progressPct",        Math.round(pct * 10.0) / 10.0
+        )).build();
+    }
+
+    public record ModuleCreateRequest(@NotBlank String title, String description, Integer orderIndex) {}
+
+    @POST
+    @Path("/{id}/modules")
+    @RequiresRole({Role.INSTRUCTOR, Role.ADMIN})
+    @Transactional
+    @Operation(summary = "Crear módulo en un curso")
+    public Response createModule(@PathParam("id") UUID courseId, ModuleCreateRequest req) {
+        UUID instructorId = UUID.fromString(authenticatedUser.getUserId());
+        Course course = courseService.findRaw(courseId, instructorId);
+        int nextOrder = course.getModules().stream()
+                .filter(m -> !m.isDeleted())
+                .mapToInt(Module::getOrderIndex).max().orElse(0) + 1;
+        Module module = new Module();
+        module.setCourse(course);
+        module.setTitle(req.title());
+        module.setDescription(req.description());
+        module.setOrderIndex(req.orderIndex() != null ? req.orderIndex() : nextOrder);
+        em.persist(module);
+        return Response.status(Response.Status.CREATED).entity(Map.of(
+                "id",          module.getId(),
+                "title",       module.getTitle(),
+                "description", module.getDescription() != null ? module.getDescription() : "",
+                "orderIndex",  module.getOrderIndex(),
+                "courseId",    courseId
+        )).build();
     }
 }

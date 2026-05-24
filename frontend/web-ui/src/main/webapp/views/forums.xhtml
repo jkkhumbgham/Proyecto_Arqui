@@ -2,8 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml"
       xmlns:h="jakarta.faces.html"
       xmlns:f="jakarta.faces.core"
-      xmlns:ui="jakarta.faces.facelets"
-      xmlns:c="jakarta.tags.core">
+      xmlns:ui="jakarta.faces.facelets">
 <ui:composition template="/WEB-INF/templates/authenticated.xhtml">
 <ui:define name="pageTitle">Foros</ui:define>
 <ui:define name="content">
@@ -11,25 +10,38 @@
     <h2 class="page-title">Foros de discusión</h2>
 
     <!-- Create forum (INSTRUCTOR / ADMIN) -->
-    <c:if test="#{sessionBean.hasRole('INSTRUCTOR', 'ADMIN')}">
+    <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
         <div class="card" style="margin-bottom:1.5rem;">
-            <h3 style="margin-bottom:.85rem;color:#1a3a6b;">Crear foro</h3>
+            <h3 style="margin-bottom:1rem;color:#1a3a6b;">Crear foro</h3>
             <h:form>
-                <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:1rem;align-items:end;">
-                    <div class="form-group" style="margin:0;">
-                        <label>Título del foro</label>
-                        <h:inputText value="#{forumBean.newForumTitle}" required="true"/>
+                <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
+                    <div class="form-group" style="margin:0;flex:1;min-width:220px;">
+                        <label class="form-label">Título del foro</label>
+                        <h:inputText value="#{forumBean.newForumTitle}" required="true"
+                                     styleClass="form-control" style="width:100%;"
+                                     placeholder="Ej: Dudas del módulo 1"/>
                     </div>
-                    <div class="form-group" style="margin:0;">
-                        <label>ID del curso</label>
-                        <h:inputText value="#{forumBean.newForumCourseId}" required="true"/>
+                    <div class="form-group" style="margin:0;flex:1;min-width:220px;">
+                        <label class="form-label">Curso</label>
+                        <h:inputText value="#{forumBean.courseSearch}" required="true"
+                                     styleClass="form-control" style="width:100%;"
+                                     placeholder="Escribe el nombre del curso..."
+                                     autocomplete="off"
+                                     list="courseDataList"/>
+                        <datalist id="courseDataList">
+                            <ui:repeat value="#{forumBean.courseOptions}" var="co">
+                                <option value="#{co.title}"/>
+                            </ui:repeat>
+                        </datalist>
                     </div>
-                    <h:commandButton value="Crear" action="#{forumBean.createForum}"
-                                     styleClass="btn btn-primary"/>
+                    <div style="padding-bottom:1px;">
+                        <h:commandButton value="Crear foro" action="#{forumBean.createForum}"
+                                         styleClass="btn btn-primary"/>
+                    </div>
                 </div>
             </h:form>
         </div>
-    </c:if>
+    </h:panelGroup>
 
     <!-- Two-column layout: forums list + threads -->
     <div style="display:grid;grid-template-columns:300px 1fr;gap:1.5rem;align-items:start;">
@@ -52,37 +64,88 @@
             </ui:repeat>
         </div>
 
-        <!-- Threads panel -->
+        <!-- Threads + posts panel -->
         <div>
-            <h:panelGroup rendered="#{not empty forumBean.threads}">
+            <h:panelGroup rendered="#{not empty forumBean.threads or not empty forumBean.selectedForumId}">
                 <div class="card" style="margin-bottom:1rem;">
-                    <h3 style="margin-bottom:.75rem;color:#1a3a6b;">Hilos</h3>
-                    <!-- New thread form -->
-                    <h:form>
-                        <div style="display:flex;gap:.75rem;margin-bottom:1rem;">
-                            <h:inputText value="#{forumBean.newThreadTitle}"
-                                         placeholder="Nuevo hilo..." style="flex:1;"/>
-                            <h:commandButton value="Crear hilo" action="#{forumBean.createThread}"
-                                             styleClass="btn btn-primary btn-sm"/>
-                        </div>
-                    </h:form>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;flex-wrap:wrap;gap:.5rem;">
+                        <h3 style="margin:0;color:#1a3a6b;">Hilos</h3>
+                        <!-- New thread form -->
+                        <h:form>
+                            <h:inputHidden value="#{forumBean.selectedForumId}"/>
+                            <div style="display:flex;flex-direction:column;gap:.4rem;min-width:280px;">
+                                <h:inputText value="#{forumBean.newThreadTitle}"
+                                             placeholder="Título del hilo..." styleClass="form-control"
+                                             style="width:100%;"/>
+                                <h:inputTextarea value="#{forumBean.newThreadContent}" rows="2"
+                                                 placeholder="Escribe el primer mensaje..." styleClass="form-control"
+                                                 style="width:100%;font-family:inherit;resize:vertical;"/>
+                                <h:commandButton value="Crear hilo" action="#{forumBean.createThread}"
+                                                 styleClass="btn btn-primary btn-sm" style="align-self:flex-end;"/>
+                            </div>
+                        </h:form>
+                    </div>
+
+                    <h:panelGroup rendered="#{empty forumBean.threads}">
+                        <p style="color:#aaa;font-size:.875rem;text-align:center;padding:.5rem 0;">
+                            Este foro aún no tiene hilos. ¡Sé el primero en crear uno!
+                        </p>
+                    </h:panelGroup>
 
                     <ui:repeat value="#{forumBean.threads}" var="thread">
-                        <div class="thread-item" style="display:flex;justify-content:space-between;align-items:center;">
-                            <div>
-                                <strong>#{thread.title}</strong>
+                        <div style="padding:.75rem 0;border-bottom:1px solid #f0f2f5;
+                                    display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;flex-wrap:wrap;">
+                            <div style="flex:1;min-width:0;">
+                                <!-- Locked badge -->
+                                <h:panelGroup rendered="#{thread['locked']}">
+                                    <span style="font-size:.72rem;background:#fff3cd;color:#856404;
+                                                 border:1px solid #ffc107;border-radius:4px;
+                                                 padding:.1rem .35rem;margin-right:.4rem;">
+                                        🔒 Bloqueado
+                                    </span>
+                                </h:panelGroup>
+                                <h:panelGroup rendered="#{thread['pinned']}">
+                                    <span style="font-size:.72rem;background:#e8f0fe;color:#1a3a6b;
+                                                 border:1px solid #aac4f0;border-radius:4px;
+                                                 padding:.1rem .35rem;margin-right:.4rem;">
+                                        📌 Fijado
+                                    </span>
+                                </h:panelGroup>
+                                <strong style="color:#{thread['locked'] ? '#999' : '#1a3a6b'};">#{thread['title']}</strong>
                                 <span style="font-size:.8rem;color:#888;margin-left:.5rem;">
-                                    #{thread.postCount} respuesta(s)
+                                    #{thread['postCount']} respuesta(s)
                                 </span>
-                                <div style="font-size:.8rem;color:#aaa;">por #{thread.author}</div>
                             </div>
-                            <h:form>
-                                <h:commandButton value="Ver" action="#{forumBean.loadPosts}"
-                                                 styleClass="btn btn-secondary btn-sm">
-                                    <f:setPropertyActionListener target="#{forumBean.selectedThreadId}"
-                                                                 value="#{thread.id}"/>
-                                </h:commandButton>
-                            </h:form>
+                            <div style="display:flex;gap:.4rem;flex-shrink:0;flex-wrap:wrap;align-items:center;">
+                                <!-- View posts -->
+                                <h:form style="display:inline;">
+                                    <h:inputHidden value="#{forumBean.selectedForumId}"/>
+                                    <h:commandButton value="Ver" action="#{forumBean.loadPosts}"
+                                                     styleClass="btn btn-secondary btn-sm">
+                                        <f:setPropertyActionListener target="#{forumBean.selectedThreadId}"
+                                                                     value="#{thread['id']}"/>
+                                    </h:commandButton>
+                                </h:form>
+                                <!-- Moderator: lock/delete -->
+                                <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN') or sessionBean.hasRole('DIRECTOR')}">
+                                    <h:form style="display:inline;">
+                                        <h:inputHidden value="#{forumBean.selectedForumId}"/>
+                                        <h:commandButton
+                                                value="#{thread['locked'] ? '🔓 Desbloquear' : '🔒 Bloquear'}"
+                                                styleClass="btn btn-secondary btn-sm"
+                                                style="font-size:.75rem;"
+                                                action="#{forumBean.lockThread(thread['id'])}"/>
+                                    </h:form>
+                                    <h:form style="display:inline;">
+                                        <h:inputHidden value="#{forumBean.selectedForumId}"/>
+                                        <h:commandButton value="🗑️ Eliminar"
+                                                         styleClass="btn btn-secondary btn-sm"
+                                                         style="font-size:.75rem;color:#c0392b;border-color:#e8c4c4;"
+                                                         action="#{forumBean.deleteThread(thread['id'])}"
+                                                         onclick="return confirm('¿Eliminar este hilo y todos sus posts?')"/>
+                                    </h:form>
+                                </h:panelGroup>
+                            </div>
                         </div>
                     </ui:repeat>
                 </div>
@@ -91,27 +154,45 @@
             <!-- Posts panel -->
             <h:panelGroup rendered="#{not empty forumBean.posts}">
                 <div class="card">
-                    <h3 style="margin-bottom:.75rem;color:#1a3a6b;">Respuestas</h3>
+                    <h3 style="margin-bottom:.75rem;color:#1a3a6b;">Respuestas
+                        <h:panelGroup rendered="#{forumBean.selectedThreadLocked}">
+                            <span style="font-size:.8rem;background:#fff3cd;color:#856404;
+                                         border:1px solid #ffc107;border-radius:4px;
+                                         padding:.15rem .4rem;margin-left:.5rem;font-weight:normal;">
+                                🔒 Hilo bloqueado
+                            </span>
+                        </h:panelGroup>
+                    </h3>
                     <ui:repeat value="#{forumBean.posts}" var="post">
                         <div class="post-item">
                             <div class="post-author">#{post.author} · #{post.createdAt}</div>
                             <p>#{post.content}</p>
                         </div>
                     </ui:repeat>
-                    <!-- Reply form -->
-                    <h:form style="margin-top:1rem;">
-                        <div class="form-group">
-                            <h:inputTextarea value="#{forumBean.newPostContent}"
-                                             rows="3" placeholder="Escribe tu respuesta..."
-                                             style="width:100%;"/>
+                    <!-- Reply form — hidden when thread is locked -->
+                    <h:panelGroup rendered="#{not forumBean.selectedThreadLocked}">
+                        <h:form style="margin-top:1rem;">
+                            <h:inputHidden value="#{forumBean.selectedThreadId}"/>
+                            <div class="form-group">
+                                <h:inputTextarea value="#{forumBean.newPostContent}"
+                                                 rows="3" placeholder="Escribe tu respuesta..."
+                                                 style="width:100%;"/>
+                            </div>
+                            <h:commandButton value="Publicar" action="#{forumBean.replyThread}"
+                                             styleClass="btn btn-primary btn-sm"/>
+                        </h:form>
+                    </h:panelGroup>
+                    <h:panelGroup rendered="#{forumBean.selectedThreadLocked}">
+                        <div style="margin-top:1rem;padding:.75rem;background:#fffbf0;
+                                    border:1px solid #ffc107;border-radius:6px;text-align:center;
+                                    color:#856404;font-size:.875rem;">
+                            Este hilo está bloqueado. No se pueden agregar nuevas respuestas.
                         </div>
-                        <h:commandButton value="Publicar" action="#{forumBean.replyThread}"
-                                         styleClass="btn btn-primary btn-sm"/>
-                    </h:form>
+                    </h:panelGroup>
                 </div>
             </h:panelGroup>
 
-            <h:panelGroup rendered="#{empty forumBean.threads and not empty forumBean.forums}">
+            <h:panelGroup rendered="#{empty forumBean.threads and empty forumBean.selectedForumId}">
                 <div class="card" style="text-align:center;color:#888;">
                     Selecciona un foro para ver sus hilos.
                 </div>

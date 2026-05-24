@@ -4,11 +4,11 @@
       xmlns:f="jakarta.faces.core"
       xmlns:ui="jakarta.faces.facelets">
 <ui:composition template="/WEB-INF/templates/layout.xhtml">
+<f:metadata>
+    <f:viewAction action="#{loginBean.redirectIfAuthenticated}"/>
+</f:metadata>
 <ui:define name="pageTitle">Iniciar sesión</ui:define>
 <ui:define name="body">
-    <f:metadata>
-        <f:viewAction action="#{loginBean.redirectIfAuthenticated}"/>
-    </f:metadata>
 
     <div class="login-page">
         <div class="login-box">
@@ -26,8 +26,9 @@
                 <div class="form-group">
                     <label for="email">Correo electrónico</label>
                     <h:inputText id="email" value="#{loginBean.email}" required="true"
-                                 requiredMessage="El correo es obligatorio.">
-                        <f:validateRegex pattern="[^@]+@[^@]+\.[^@]+" validatorMessage="Correo inválido"/>
+                                 requiredMessage="El correo es obligatorio."
+                                 validatorMessage="Correo inválido">
+                        <f:validateRegex pattern="[^@]+@[^@]+\.[^@]+"/>
                     </h:inputText>
                     <h:message for="email" style="color:#c0392b;font-size:.8rem;"/>
                 </div>

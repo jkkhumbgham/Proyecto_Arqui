@@ -23,6 +23,9 @@ public class GroupMember {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    @Column(name = "is_tutor", nullable = false)
+    private boolean isTutor = false;
+
     @Column(name = "joined_at", nullable = false, updatable = false)
     private Instant joinedAt;
 
@@ -35,15 +38,18 @@ public class GroupMember {
         joinedAt = Instant.now();
     }
 
-    public boolean isDeleted() { return deletedAt != null; }
-    public void softDelete()   { this.deletedAt = Instant.now(); }
+    public boolean isDeleted()  { return deletedAt != null; }
+    public void softDelete()    { this.deletedAt = Instant.now(); }
+    public void softRestore()   { this.deletedAt = null; }
 
     public UUID       getId()       { return id; }
     public StudyGroup getGroup()    { return group; }
     public UUID       getUserId()   { return userId; }
+    public boolean    isTutor()     { return isTutor; }
     public Instant    getJoinedAt() { return joinedAt; }
     public Instant    getDeletedAt(){ return deletedAt; }
 
     public void setGroup(StudyGroup group) { this.group = group; }
     public void setUserId(UUID userId)     { this.userId = userId; }
+    public void setTutor(boolean tutor)    { this.isTutor = tutor; }
 }

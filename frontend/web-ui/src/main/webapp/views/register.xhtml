@@ -22,10 +22,25 @@
                 <div class="form-group">
                     <label for="email">Correo electrónico</label>
                     <h:inputText id="email" value="#{loginBean.email}" required="true"
-                                 requiredMessage="El correo es obligatorio.">
-                        <f:validateRegex pattern="[^@]+@[^@]+\.[^@]+" validatorMessage="Correo inválido"/>
+                                 requiredMessage="El correo es obligatorio."
+                                 validatorMessage="Correo inválido">
+                        <f:validateRegex pattern="[^@]+@[^@]+\.[^@]+"/>
                     </h:inputText>
                     <h:message for="email" style="color:#c0392b;font-size:.8rem;"/>
+                </div>
+
+                <div class="form-group">
+                    <label for="firstName">Nombre</label>
+                    <h:inputText id="firstName" value="#{loginBean.firstName}" required="true"
+                                 requiredMessage="El nombre es obligatorio."/>
+                    <h:message for="firstName" style="color:#c0392b;font-size:.8rem;"/>
+                </div>
+
+                <div class="form-group">
+                    <label for="lastName">Apellido</label>
+                    <h:inputText id="lastName" value="#{loginBean.lastName}" required="true"
+                                 requiredMessage="El apellido es obligatorio."/>
+                    <h:message for="lastName" style="color:#c0392b;font-size:.8rem;"/>
                 </div>
 
                 <div class="form-group">

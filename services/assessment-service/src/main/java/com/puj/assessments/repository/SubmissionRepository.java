@@ -46,4 +46,38 @@ public class SubmissionRepository {
                 .setMaxResults(size)
                 .getResultList();
     }
+
+    public List<Submission> findByAssessment(UUID assessmentId) {
+        return em.createQuery(
+                        "SELECT s FROM Submission s WHERE s.assessment.id = :aid" +
+                        " AND s.status IN (com.puj.assessments.entity.SubmissionStatus.SUBMITTED, com.puj.assessments.entity.SubmissionStatus.GRADED)" +
+                        " ORDER BY s.submittedAt DESC",
+                        Submission.class)
+                .setParameter("aid", assessmentId)
+                .getResultList();
+    }
+
+    public List<Submission> findCompletedByUser(UUID userId, int page, int size) {
+        return em.createQuery(
+                        "SELECT s FROM Submission s WHERE s.userId = :uid" +
+                        " AND s.status IN (com.puj.assessments.entity.SubmissionStatus.SUBMITTED, com.puj.assessments.entity.SubmissionStatus.GRADED)" +
+                        " ORDER BY s.submittedAt DESC",
+                        Submission.class)
+                .setParameter("uid", userId)
+                .setFirstResult(page * size)
+                .setMaxResults(size)
+                .getResultList();
+    }
+
+    public List<Submission> findByUserAndAssessments(UUID userId, List<UUID> assessmentIds) {
+        if (assessmentIds == null || assessmentIds.isEmpty()) return List.of();
+        return em.createQuery(
+                        "SELECT s FROM Submission s WHERE s.userId = :uid" +
+                        " AND s.assessment.id IN :aids" +
+                        " AND s.status IN (com.puj.assessments.entity.SubmissionStatus.SUBMITTED, com.puj.assessments.entity.SubmissionStatus.GRADED)",
+                        Submission.class)
+                .setParameter("uid", userId)
+                .setParameter("aids", assessmentIds)
+                .getResultList();
+    }
 }

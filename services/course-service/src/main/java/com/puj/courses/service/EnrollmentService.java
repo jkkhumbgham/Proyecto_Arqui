@@ -55,6 +55,7 @@ public class EnrollmentService {
         return EnrollmentResponse.from(enrollment);
     }
 
+    @Transactional
     public List<EnrollmentResponse> findByUser(UUID userId) {
         return enrollmentRepo.findByUser(userId).stream()
                 .map(EnrollmentResponse::from)

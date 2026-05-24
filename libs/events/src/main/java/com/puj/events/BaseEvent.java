@@ -8,10 +8,14 @@ import java.util.UUID;
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "eventType")
 @JsonSubTypes({
-        @JsonSubTypes.Type(value = UserRegisteredEvent.class,     name = "USER_REGISTERED"),
-        @JsonSubTypes.Type(value = CourseEnrolledEvent.class,     name = "COURSE_ENROLLED"),
-        @JsonSubTypes.Type(value = AssessmentSubmittedEvent.class, name = "ASSESSMENT_SUBMITTED"),
-        @JsonSubTypes.Type(value = EmailNotificationEvent.class,  name = "EMAIL_NOTIFICATION")
+        @JsonSubTypes.Type(value = UserRegisteredEvent.class,         name = "USER_REGISTERED"),
+        @JsonSubTypes.Type(value = CourseEnrolledEvent.class,         name = "COURSE_ENROLLED"),
+        @JsonSubTypes.Type(value = AssessmentSubmittedEvent.class,    name = "ASSESSMENT_SUBMITTED"),
+        @JsonSubTypes.Type(value = EmailNotificationEvent.class,      name = "EMAIL_NOTIFICATION"),
+        @JsonSubTypes.Type(value = LearningPathEnrolledEvent.class,   name = "LEARNING_PATH_ENROLLED"),
+        @JsonSubTypes.Type(value = LessonCompletedEvent.class,        name = "LESSON_COMPLETED"),
+        @JsonSubTypes.Type(value = ForumPostCreatedEvent.class,       name = "FORUM_POST_CREATED"),
+        @JsonSubTypes.Type(value = CertificateIssuedEvent.class,      name = "CERTIFICATE_ISSUED")
 })
 public abstract class BaseEvent {
 

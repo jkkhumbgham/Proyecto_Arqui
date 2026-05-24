@@ -2,16 +2,14 @@
 <html xmlns="http://www.w3.org/1999/xhtml"
       xmlns:h="jakarta.faces.html"
       xmlns:f="jakarta.faces.core"
-      xmlns:ui="jakarta.faces.facelets"
-      xmlns:c="jakarta.tags.core">
+      xmlns:ui="jakarta.faces.facelets">
 <ui:composition template="/WEB-INF/templates/authenticated.xhtml">
 <ui:define name="pageTitle">Dashboard</ui:define>
 <ui:define name="content">
 
-    <h2 class="page-title">Dashboard</h2>
-
-    <!-- ===== DIRECTOR / ADMIN: analytics summary ===== -->
-    <c:if test="#{sessionBean.hasRole('DIRECTOR', 'ADMIN')}">
+    <!-- ===== DIRECTOR / ADMIN ===== -->
+    <h:panelGroup rendered="#{sessionBean.hasRole('DIRECTOR') or sessionBean.hasRole('ADMIN')}">
+        <h2 class="page-title">Panel de administración</h2>
         <div class="stats-row">
             <div class="stat-card">
                 <div class="stat-value">#{dashboardBean.totalUsers}</div>
@@ -22,69 +20,236 @@
                 <div class="stat-label">Inscripciones totales</div>
             </div>
             <div class="stat-card">
+                <div class="stat-value">#{dashboardBean.totalCourses}</div>
+                <div class="stat-label">Cursos activos</div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-value">#{dashboardBean.avgScore}%</div>
                 <div class="stat-label">Promedio evaluaciones</div>
             </div>
         </div>
 
-        <div class="card">
+        <div class="card" style="margin-bottom:1.5rem;">
             <h3 style="margin-bottom:1rem;color:#1a3a6b;">Cursos más populares</h3>
             <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Curso</th>
-                        <th>Inscripciones</th>
-                        <th>Promedio</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Curso</th><th>Inscripciones</th><th>Promedio</th></tr></thead>
                 <tbody>
-                    <ui:repeat value="#{dashboardBean.topCourses}" var="c">
+                    <ui:repeat value="#{dashboardBean.topCourses}" var="tc">
                         <tr>
-                            <td>#{c.title}</td>
-                            <td>#{c.enrollments}</td>
-                            <td>#{c.avgScore}%</td>
+                            <td>#{tc.title}</td>
+                            <td>#{tc.enrollments}</td>
+                            <td>#{tc.avgScore}%</td>
                         </tr>
                     </ui:repeat>
                 </tbody>
             </table>
         </div>
-    </c:if>
 
-    <!-- ===== STUDENT / INSTRUCTOR: my courses ===== -->
-    <c:if test="#{sessionBean.hasRole('STUDENT', 'INSTRUCTOR')}">
-        <h3 style="margin-bottom:1rem;color:#1a3a6b;">Mis cursos</h3>
-
-        <c:if test="#{empty dashboardBean.myCourses}">
-            <div class="card" style="text-align:center;color:#888;">
-                <p>No tienes cursos inscritos.</p>
-                <h:link value="Explorar catálogo" outcome="/views/courses"
-                        styleClass="btn btn-primary" style="margin-top:.75rem;display:inline-block;"/>
+        <h:panelGroup rendered="#{not empty dashboardBean.inactiveUsers}">
+            <div class="card">
+                <h3 style="margin-bottom:1rem;color:#1a3a6b;">
+                    Cuentas sin actividad (+ 30 días)
+                </h3>
+                <table class="data-table">
+                    <thead><tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Último acceso</th></tr></thead>
+                    <tbody>
+                        <ui:repeat value="#{dashboardBean.inactiveUsers}" var="iu">
+                            <tr>
+                                <td>#{iu.email}</td>
+                                <td>#{iu.firstName} #{iu.lastName}</td>
+                                <td><span class="badge badge-blue" style="font-size:.75rem;">#{iu.role}</span></td>
+                                <td style="font-size:.85rem;color:#888;">#{iu.lastLoginAt}</td>
+                            </tr>
+                        </ui:repeat>
+                    </tbody>
+                </table>
             </div>
-        </c:if>
+        </h:panelGroup>
+    </h:panelGroup>
 
-        <div class="card-grid">
-            <ui:repeat value="#{dashboardBean.myCourses}" var="course">
-                <div class="card">
-                    <strong>#{course.title}</strong>
-                    <div style="margin:.6rem 0 .3rem;font-size:.85rem;color:#666;">
-                        Progreso: #{course.progress}%
+    <!-- ===== INSTRUCTOR ===== -->
+    <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR')}">
+        <h2 class="page-title">Panel de métricas</h2>
+
+        <div class="stats-row" style="margin-bottom:1.5rem;">
+            <div class="stat-card">
+                <div class="stat-value">#{dashboardBean.totalInstructorStudents}</div>
+                <div class="stat-label">Estudiantes totales</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="font-size:1.6rem;">
+                    #{dashboardBean.instructorMetrics.size()}
+                </div>
+                <div class="stat-label">Cursos activos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">
+                    <h:outputText value="#{dashboardBean.avgInstructorGrade}">
+                        <f:convertNumber maxFractionDigits="1"/>
+                    </h:outputText>%
+                </div>
+                <div class="stat-label">Calificación promedio</div>
+            </div>
+        </div>
+
+        <h:panelGroup rendered="#{empty dashboardBean.instructorMetrics}">
+            <div class="card" style="text-align:center;padding:2rem;color:#888;">
+                <p>No hay métricas disponibles. Ve a
+                    <h:link value="Cursos" outcome="/views/courses"/> para gestionar tus cursos.</p>
+            </div>
+        </h:panelGroup>
+
+        <ui:repeat value="#{dashboardBean.instructorMetrics}" var="im">
+            <div class="card" style="margin-bottom:1rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+                    <strong style="color:#1a3a6b;font-size:1rem;">#{im.courseTitle}</strong>
+                    <h:link value="Gestionar" outcome="/views/course-detail"
+                            styleClass="btn btn-secondary btn-sm">
+                        <f:param name="courseId" value="#{im.courseId}"/>
+                    </h:link>
+                </div>
+                <div class="stats-row" style="gap:.75rem;margin-bottom:.75rem;">
+                    <div class="stat-card" style="padding:.75rem;flex:1;">
+                        <div class="stat-value" style="font-size:1.2rem;">#{im.enrolledCount}</div>
+                        <div class="stat-label" style="font-size:.75rem;">Inscritos</div>
                     </div>
-                    <div class="progress-bar-wrap">
-                        <div class="progress-bar-fill" style="width:#{course.progress}%;"/>
+                    <div class="stat-card" style="padding:.75rem;flex:1;">
+                        <div class="stat-value" style="font-size:1.2rem;">
+                            <h:outputText value="#{im.avgGradePct}">
+                                <f:convertNumber maxFractionDigits="1"/>
+                            </h:outputText>%
+                        </div>
+                        <div class="stat-label" style="font-size:.75rem;">Calificación promedio</div>
                     </div>
-                    <div style="margin-top:.6rem;">
-                        <span class="badge #{course.status == 'COMPLETED' ? 'badge-green' : 'badge-blue'}">
-                            #{course.status}
-                        </span>
+                    <div class="stat-card" style="padding:.75rem;flex:1;">
+                        <div class="stat-value" style="font-size:1.2rem;">
+                            <h:outputText value="#{im.avgProgressPct}">
+                                <f:convertNumber maxFractionDigits="1"/>
+                            </h:outputText>%
+                        </div>
+                        <div class="stat-label" style="font-size:.75rem;">Avance promedio</div>
                     </div>
-                    <div style="margin-top:.75rem;">
-                        <h:link value="Ver evaluaciones" outcome="/views/assessments"
-                                styleClass="btn btn-secondary btn-sm"/>
+                </div>
+                <h:panelGroup rendered="#{not empty im.moduleDistribution}">
+                    <p style="font-size:.8rem;color:#888;margin-bottom:.4rem;">Distribución por módulo:</p>
+                    <ui:repeat value="#{im.moduleDistribution}" var="mdRow">
+                        <div style="display:flex;justify-content:space-between;font-size:.85rem;
+                                    padding:.25rem 0;border-bottom:1px solid #f0f0f0;">
+                            <span>#{mdRow['moduleTitle']}</span>
+                            <span style="color:#2980b9;font-weight:600;">#{mdRow['studentCount']} estudiantes</span>
+                        </div>
+                    </ui:repeat>
+                </h:panelGroup>
+            </div>
+        </ui:repeat>
+    </h:panelGroup>
+
+    <!-- ===== STUDENT ===== -->
+    <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+            <h2 class="page-title" style="margin:0;">Mi aprendizaje</h2>
+            <h:link value="Explorar cursos" outcome="/views/courses"
+                    styleClass="btn btn-secondary btn-sm"/>
+        </div>
+
+        <h:panelGroup rendered="#{empty dashboardBean.enrolledCourses}">
+            <div class="card" style="text-align:center;padding:3rem;color:#888;">
+                <p style="font-size:1.1rem;margin-bottom:1rem;">Aún no te has inscrito en ningún curso.</p>
+                <h:link value="Explorar catálogo" outcome="/views/courses"
+                        styleClass="btn btn-primary"/>
+            </div>
+        </h:panelGroup>
+
+        <!-- Course progress list -->
+        <div style="display:flex;flex-direction:column;gap:1rem;margin-bottom:1.5rem;">
+            <ui:repeat value="#{dashboardBean.enrolledCourses}" var="ec">
+                <div class="card" style="display:flex;gap:1.5rem;align-items:center;padding:1.25rem 1.5rem;">
+                    <div style="width:56px;height:56px;border-radius:10px;flex-shrink:0;
+                                background:linear-gradient(135deg,#1a3a6b,#2980b9);
+                                display:flex;align-items:center;justify-content:center;">
+                        <span style="font-size:1.3rem;color:#fff;">📚</span>
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;
+                                    gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem;">
+                            <strong style="font-size:1rem;color:#1a3a6b;">#{ec.title}</strong>
+                            <h:panelGroup rendered="#{ec.completed}">
+                                <span class="badge badge-green">¡Completado!</span>
+                            </h:panelGroup>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;">
+                            <div style="flex:1;background:#e2e8f0;border-radius:999px;height:6px;">
+                                <div style="width:#{ec.progressPct}%;background:#2ecc71;
+                                            border-radius:999px;height:6px;"/>
+                            </div>
+                            <span style="font-size:.8rem;color:#666;white-space:nowrap;min-width:80px;text-align:right;">
+                                #{ec.completedCount} / #{ec.totalLessons} lecciones
+                            </span>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:.5rem;flex-shrink:0;">
+                        <h:panelGroup rendered="#{ec.firstUncompletedLessonId != null and !ec.completed}">
+                            <h:link value="Continuar" outcome="/views/lesson-viewer"
+                                    styleClass="btn btn-primary btn-sm">
+                                <f:param name="lessonId" value="#{ec.firstUncompletedLessonId}"/>
+                                <f:param name="courseId" value="#{ec.courseId}"/>
+                            </h:link>
+                        </h:panelGroup>
+                        <h:link value="Ver curso" outcome="/views/course-detail"
+                                styleClass="btn btn-secondary btn-sm">
+                            <f:param name="courseId" value="#{ec.courseId}"/>
+                        </h:link>
                     </div>
                 </div>
             </ui:repeat>
         </div>
-    </c:if>
+
+        <!-- Grades section -->
+        <h:panelGroup rendered="#{not empty dashboardBean.studentGrades}">
+            <h3 style="color:#1a3a6b;margin-bottom:1rem;">Mis calificaciones</h3>
+            <ui:repeat value="#{dashboardBean.studentGrades}" var="cg">
+                <div class="card" style="margin-bottom:1rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+                        <strong style="color:#1a3a6b;">#{cg.courseTitle}</strong>
+                        <span class="badge #{cg.avgScorePct >= 60 ? 'badge-green' : 'badge-red'}"
+                              style="font-size:.85rem;">
+                            Promedio:
+                            <h:outputText value="#{cg.avgScorePct}">
+                                <f:convertNumber maxFractionDigits="1"/>
+                            </h:outputText>%
+                        </span>
+                    </div>
+                    <table class="data-table" style="font-size:.875rem;">
+                        <thead>
+                            <tr>
+                                <th>Evaluación</th>
+                                <th style="text-align:right;">Nota</th>
+                                <th style="text-align:center;">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <ui:repeat value="#{cg.evals}" var="ev">
+                                <tr>
+                                    <td>#{ev.assessmentTitle}</td>
+                                    <td style="text-align:right;">
+                                        <h:outputText value="#{ev.scorePct}">
+                                            <f:convertNumber maxFractionDigits="1"/>
+                                        </h:outputText>%
+                                    </td>
+                                    <td style="text-align:center;">
+                                        <span class="badge #{ev.passed ? 'badge-green' : 'badge-red'}"
+                                              style="font-size:.75rem;">
+                                            #{ev.passed ? 'Aprobado' : 'Reprobado'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </ui:repeat>
+                        </tbody>
+                    </table>
+                </div>
+            </ui:repeat>
+        </h:panelGroup>
+    </h:panelGroup>
 
 </ui:define>
 </ui:composition>

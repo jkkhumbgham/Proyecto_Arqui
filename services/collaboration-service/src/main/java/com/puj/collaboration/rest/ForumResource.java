@@ -5,6 +5,8 @@ import com.puj.collaboration.dto.ThreadRequest;
 import com.puj.collaboration.entity.*;
 import com.puj.collaboration.entity.Thread;
 import com.puj.collaboration.repository.ForumRepository;
+import com.puj.events.ForumPostCreatedEvent;
+import com.puj.events.publisher.EventPublisher;
 import com.puj.security.rbac.AuthenticatedUser;
 import com.puj.security.rbac.RequiresRole;
 import com.puj.security.rbac.Role;
@@ -17,7 +19,11 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Path("/forums")
 @Produces(MediaType.APPLICATION_JSON)
@@ -26,7 +32,22 @@ import java.util.UUID;
 public class ForumResource {
 
     @Inject private ForumRepository   forumRepo;
+    @Inject private EventPublisher    eventPublisher;
     @Inject private AuthenticatedUser authenticatedUser;
+
+    @GET
+    @Operation(summary = "Listar todos los foros")
+    public Response listForums() {
+        List<Map<String, Object>> result = forumRepo.findAll().stream().map(f -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id",       f.getId().toString());
+            m.put("title",    f.getTitle());
+            m.put("courseId", f.getCourseId() != null ? f.getCourseId().toString() : "");
+            if (f.getDescription() != null) m.put("description", f.getDescription());
+            return m;
+        }).collect(Collectors.toList());
+        return Response.ok(result).build();
+    }
 
     @GET
     @Path("/courses/{courseId}")
@@ -35,6 +56,47 @@ public class ForumResource {
         return forumRepo.findByCourse(courseId)
                 .map(f -> Response.ok(f).build())
                 .orElse(Response.status(Response.Status.NOT_FOUND).build());
+    }
+
+    @GET
+    @Path("/{forumId}/threads")
+    @Operation(summary = "Listar hilos de un foro")
+    public Response listThreads(@PathParam("forumId") UUID forumId) {
+        List<Object[]> rows = forumRepo.findThreadsWithPostCount(forumId);
+        List<Map<String, Object>> result = rows.stream().map(row -> {
+            Thread t = (Thread) row[0];
+            long count = ((Number) row[1]).longValue();
+            Map<String, Object> m = new HashMap<>();
+            m.put("id",        t.getId().toString());
+            m.put("title",     t.getTitle());
+            m.put("authorId",  t.getAuthorId().toString());
+            m.put("locked",    t.isLocked());
+            m.put("pinned",    t.isPinned());
+            m.put("createdAt", t.getCreatedAt().toString());
+            m.put("postCount", count);
+            return m;
+        }).collect(Collectors.toList());
+        return Response.ok(result).build();
+    }
+
+    @GET
+    @Path("/threads/{threadId}/posts")
+    @Operation(summary = "Listar posts de un hilo")
+    public Response listPosts(@PathParam("threadId") UUID threadId) {
+        Thread thread = forumRepo.findThreadById(threadId)
+                .orElseThrow(() -> new NotFoundException("Hilo no encontrado."));
+        List<Map<String, Object>> postList = forumRepo.findPostsByThread(threadId).stream().map(p -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id",        p.getId().toString());
+            m.put("content",   p.getContent());
+            m.put("authorId",  p.getAuthorId().toString());
+            m.put("createdAt", p.getCreatedAt().toString());
+            return m;
+        }).collect(Collectors.toList());
+        Map<String, Object> response = new HashMap<>();
+        response.put("locked", thread.isLocked());
+        response.put("posts",  postList);
+        return Response.ok(response).build();
     }
 
     @POST
@@ -69,7 +131,13 @@ public class ForumResource {
         firstPost.setContent(req.content());
         forumRepo.savePost(firstPost);
 
-        return Response.status(Response.Status.CREATED).entity(thread).build();
+        eventPublisher.publishAnalytics(new ForumPostCreatedEvent(
+                thread.getAuthorId().toString(), forumId.toString(),
+                forum.getCourseId() != null ? forum.getCourseId().toString() : "", true));
+
+        return Response.status(Response.Status.CREATED)
+                .entity(Map.of("id", thread.getId().toString(), "title", thread.getTitle()))
+                .build();
     }
 
     @POST
@@ -92,7 +160,39 @@ public class ForumResource {
         post.setContent(req.content());
         forumRepo.savePost(post);
 
-        return Response.status(Response.Status.CREATED).entity(post).build();
+        eventPublisher.publishAnalytics(new ForumPostCreatedEvent(
+                post.getAuthorId().toString(), threadId.toString(),
+                thread.getForum().getCourseId() != null ? thread.getForum().getCourseId().toString() : "", false));
+
+        return Response.status(Response.Status.CREATED)
+                .entity(Map.of("id", post.getId().toString()))
+                .build();
+    }
+
+    @DELETE
+    @Path("/threads/{threadId}")
+    @RequiresRole({Role.INSTRUCTOR, Role.ADMIN, Role.DIRECTOR})
+    @Transactional
+    @Operation(summary = "Eliminar hilo (moderador)")
+    public Response deleteThread(@PathParam("threadId") UUID threadId) {
+        forumRepo.findThreadById(threadId).ifPresent(t -> {
+            t.softDelete();
+            forumRepo.mergeThread(t);
+        });
+        return Response.noContent().build();
+    }
+
+    @PUT
+    @Path("/threads/{threadId}/lock")
+    @RequiresRole({Role.INSTRUCTOR, Role.ADMIN, Role.DIRECTOR})
+    @Transactional
+    @Operation(summary = "Bloquear/desbloquear hilo (moderador)")
+    public Response lockThread(@PathParam("threadId") UUID threadId) {
+        Thread thread = forumRepo.findThreadById(threadId)
+                .orElseThrow(() -> new NotFoundException("Hilo no encontrado."));
+        thread.setLocked(!thread.isLocked());
+        forumRepo.mergeThread(thread);
+        return Response.ok(Map.of("locked", thread.isLocked())).build();
     }
 
     @DELETE

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Editar módulo</ui:define>
+<ui:define name="content">
+
+    <f:event type="preRenderView" listener="#{editBean.load}"/>
+
+    <h:link value="← Volver al curso" outcome="/views/course-detail"
+            styleClass="btn btn-secondary btn-sm"
+            style="margin-bottom:1rem;display:inline-block;">
+        <f:param name="courseId" value="#{editBean.courseId}"/>
+    </h:link>
+
+    <h2 class="page-title">Editar módulo</h2>
+
+    <h:messages globalOnly="true" styleClass="alert alert-warn" style="margin-bottom:1rem;"/>
+
+    <div class="card" style="max-width:600px;">
+        <h:form>
+            <h:inputHidden value="#{editBean.courseId}"/>
+            <h:inputHidden value="#{editBean.moduleId}"/>
+
+            <div class="form-group">
+                <label class="form-label">Título *</label>
+                <h:inputText value="#{editBean.moduleTitle}" styleClass="form-control" style="width:100%;"/>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Descripción</label>
+                <h:inputTextarea value="#{editBean.moduleDescription}" rows="3"
+                                 styleClass="form-control" style="width:100%;"/>
+            </div>
+
+            <div style="display:flex;gap:1rem;margin-top:1.25rem;">
+                <h:link value="Cancelar" outcome="/views/course-detail" styleClass="btn btn-secondary">
+                    <f:param name="courseId" value="#{editBean.courseId}"/>
+                </h:link>
+                <h:commandButton value="Guardar cambios" action="#{editBean.updateModule}"
+                                 styleClass="btn btn-primary"
+                                 onclick="return confirm('¿Guardar los cambios en el módulo?')"/>
+            </div>
+        </h:form>
+    </div>
+
+</ui:define>
+</ui:composition>
+</html>

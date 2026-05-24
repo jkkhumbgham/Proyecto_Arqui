@@ -3,6 +3,7 @@ package com.puj.users.rest;
 import com.puj.security.rbac.AuthenticatedUser;
 import com.puj.security.rbac.RequiresRole;
 import com.puj.security.rbac.Role;
+import com.puj.users.dto.AdminCreateUserRequest;
 import com.puj.users.dto.UpdateUserRequest;
 import com.puj.users.dto.UserResponse;
 import com.puj.users.service.UserService;
@@ -30,13 +31,30 @@ public class UserResource {
     @Inject private AuthenticatedUser authenticatedUser;
 
     @GET
-    @RequiresRole(Role.ADMIN)
-    @Operation(summary = "Listar todos los usuarios (ADMIN)")
-    public Response findAll(@QueryParam("page") @DefaultValue("0") int page,
-                            @QueryParam("size") @DefaultValue("20") int size) {
+    @RequiresRole({Role.ADMIN, Role.DIRECTOR})
+    @Operation(summary = "Listar todos los usuarios (ADMIN/DIRECTOR); ?inactive=true&days=30 para inactivos")
+    public Response findAll(@QueryParam("page")     @DefaultValue("0")  int     page,
+                            @QueryParam("size")     @DefaultValue("20") int     size,
+                            @QueryParam("inactive")                     boolean inactive,
+                            @QueryParam("days")     @DefaultValue("30") int     days) {
+        if (inactive) {
+            List<UserResponse> users = userService.findInactive(days, page, Math.min(size, 100));
+            return Response.ok(Map.of("data", users, "page", page)).build();
+        }
         List<UserResponse> users = userService.findAll(page, Math.min(size, 100));
         long total = userService.count();
         return Response.ok(Map.of("data", users, "total", total, "page", page)).build();
+    }
+
+    @POST
+    @RequiresRole(Role.ADMIN)
+    @Operation(summary = "Crear usuario desde admin (ADMIN)")
+    public Response adminCreate(@Valid AdminCreateUserRequest req,
+                                @Context HttpHeaders headers) {
+        String ip = headers.getHeaderString("X-Forwarded-For");
+        UUID adminId = UUID.fromString(authenticatedUser.getUserId());
+        UserResponse created = userService.adminCreate(req, adminId, ip);
+        return Response.status(Response.Status.CREATED).entity(created).build();
     }
 
     @GET
@@ -45,6 +63,17 @@ public class UserResource {
     public UserResponse findById(@PathParam("id") UUID id) {
         requireSelfOrAdmin(id);
         return userService.findById(id);
+    }
+
+    @GET
+    @Path("/{id}/name")
+    @Operation(summary = "Obtener nombre para mostrar de un usuario (cualquier usuario autenticado)")
+    public Response getDisplayName(@PathParam("id") UUID id) {
+        if (!authenticatedUser.isAuthenticated()) throw new NotAuthorizedException("Bearer realm=\"puj\"");
+        UserResponse u = userService.findById(id);
+        String displayName = (u.firstName() + " " + u.lastName()).trim();
+        if (displayName.isBlank()) displayName = u.email();
+        return Response.ok(Map.of("id", id.toString(), "displayName", displayName)).build();
     }
 
     @PUT

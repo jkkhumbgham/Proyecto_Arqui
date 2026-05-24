@@ -2,12 +2,13 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using Puj.Analytics.Data;
 using Puj.Analytics.Consumers;
 using Puj.Analytics.Endpoints;
 using Puj.Analytics.Exports;
+using Puj.Analytics.Services;
 using System.Security.Cryptography;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,11 +39,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// ─── Services ─────────────────────────────────────────────────────────────────
+builder.Services.AddSingleton<MinioStorageService>();
+builder.Services.AddScoped<CertificateService>();
+builder.Services.AddHostedService<MonthlySnapshotJob>();
+
 // ─── MassTransit / RabbitMQ ────────────────────────────────────────────────────
 builder.Services.AddMassTransit(x => {
     x.AddConsumer<AssessmentSubmittedConsumer>();
     x.AddConsumer<CourseEnrolledConsumer>();
     x.AddConsumer<UserRegisteredConsumer>();
+    x.AddConsumer<LessonCompletedConsumer>();
 
     x.UsingRabbitMq((ctx, cfg) => {
         cfg.Host(
@@ -55,9 +62,12 @@ builder.Services.AddMassTransit(x => {
             });
 
         cfg.ReceiveEndpoint("analytics.results", e => {
+            e.SetQueueArgument("x-message-ttl", 86400000L);
+            e.SetQueueArgument("x-dead-letter-exchange", "platform.dlx");
             e.ConfigureConsumer<AssessmentSubmittedConsumer>(ctx);
             e.ConfigureConsumer<CourseEnrolledConsumer>(ctx);
             e.ConfigureConsumer<UserRegisteredConsumer>(ctx);
+            e.ConfigureConsumer<LessonCompletedConsumer>(ctx);
             e.UseMessageRetry(r => r.Intervals(500, 1000, 2000));
         });
 
@@ -79,8 +89,20 @@ var app = builder.Build();
 
 // ─── Migrations ────────────────────────────────────────────────────────────────
 using (var scope = app.Services.CreateScope()) {
-    var db = scope.ServiceProvider.GetRequiredService<AnalyticsDbContext>();
-    db.Database.Migrate();
+    var db  = scope.ServiceProvider.GetRequiredService<AnalyticsDbContext>();
+    var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try {
+        db.Database.EnsureCreated();
+        log.LogInformation("Analytics schema ready.");
+
+        if (!db.PlatformStats.Any()) {
+            db.PlatformStats.Add(new Puj.Analytics.Models.PlatformStats());
+            db.SaveChanges();
+            log.LogInformation("platform_stats singleton creado.");
+        }
+    } catch (Exception ex) {
+        log.LogWarning(ex, "Analytics schema initialization warning (tables may already exist).");
+    }
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -94,6 +116,8 @@ app.MapDashboardEndpoints();
 app.MapCourseAnalyticsEndpoints();
 app.MapStudentProgressEndpoints();
 app.MapExportEndpoints();
+app.MapCertificateEndpoints();
+app.MapMonthlySnapshotEndpoints();
 
 app.MapGet("/health", () => Results.Ok(new { status = "UP", timestamp = DateTime.UtcNow }))
    .WithTags("Health");

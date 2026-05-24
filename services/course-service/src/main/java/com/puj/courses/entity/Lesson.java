@@ -34,9 +34,23 @@ public class Lesson {
     @Column(name = "duration_minutes")
     private Integer durationMinutes;
 
+    @Column(name = "content_type", nullable = false, length = 20)
+    private String contentType = "TEXT";   // TEXT | VIDEO | PDF | DOCUMENT
+
+    @Column(name = "content_url", columnDefinition = "TEXT")
+    private String contentUrl;
+
+    @Column(name = "is_supplementary", nullable = false)
+    private boolean supplementary = false;
+
     @OneToMany(mappedBy = "lesson", cascade = CascadeType.ALL, orphanRemoval = true,
                fetch = FetchType.LAZY)
     private List<S3Resource> resources = new ArrayList<>();
+
+    @OneToMany(mappedBy = "lesson", cascade = CascadeType.ALL, orphanRemoval = true,
+               fetch = FetchType.LAZY)
+    @OrderBy("orderIndex ASC")
+    private List<LessonContent> contents = new ArrayList<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -50,8 +64,9 @@ public class Lesson {
         createdAt = Instant.now();
     }
 
-    public boolean isDeleted() { return deletedAt != null; }
-    public void softDelete()   { this.deletedAt = Instant.now(); }
+    public boolean isDeleted()        { return deletedAt != null; }
+    public void softDelete()          { this.deletedAt = Instant.now(); }
+    public boolean isSupplementary()  { return supplementary; }
 
     public UUID           getId()              { return id; }
     public Module         getModule()          { return module; }
@@ -59,13 +74,20 @@ public class Lesson {
     public String         getContent()         { return content; }
     public int            getOrderIndex()      { return orderIndex; }
     public Integer        getDurationMinutes() { return durationMinutes; }
-    public List<S3Resource> getResources()     { return resources; }
+    public List<S3Resource>    getResources() { return resources; }
+    public List<LessonContent> getContents()  { return contents; }
     public Instant        getCreatedAt()       { return createdAt; }
     public Instant        getDeletedAt()       { return deletedAt; }
+
+    public String  getContentType()              { return contentType; }
+    public String  getContentUrl()               { return contentUrl; }
 
     public void setModule(Module module)                 { this.module = module; }
     public void setTitle(String title)                   { this.title = title; }
     public void setContent(String content)               { this.content = content; }
     public void setOrderIndex(int orderIndex)            { this.orderIndex = orderIndex; }
     public void setDurationMinutes(Integer d)            { this.durationMinutes = d; }
+    public void setContentType(String t)                 { this.contentType = t; }
+    public void setContentUrl(String u)                  { this.contentUrl = u; }
+    public void setSupplementary(boolean s)              { this.supplementary = s; }
 }

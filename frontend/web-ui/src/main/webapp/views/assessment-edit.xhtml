@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Editar evaluación</ui:define>
+<ui:define name="content">
+    <f:event type="preRenderView" listener="#{assessmentBuilderBean.onPreRenderViewEdit}"/>
+
+    <h:link value="← Volver al curso" outcome="/views/course-detail"
+            rendered="#{not empty assessmentBuilderBean.courseId}"
+            styleClass="btn btn-secondary btn-sm"
+            style="margin-bottom:1rem;display:inline-block;">
+        <f:param name="courseId" value="#{assessmentBuilderBean.courseId}"/>
+    </h:link>
+
+    <h2 class="page-title">Editar evaluación</h2>
+
+    <h:form id="editForm">
+        <h:inputHidden value="#{assessmentBuilderBean.courseId}"/>
+        <h:inputHidden value="#{assessmentBuilderBean.moduleId}"/>
+        <h:inputHidden value="#{assessmentBuilderBean.editAssessmentId}"/>
+
+        <div class="card" style="margin-bottom:1.5rem;">
+            <h3 style="color:#1a3a6b;margin-top:0;">Información general</h3>
+            <div class="form-group">
+                <label class="form-label">Título *</label>
+                <h:inputText value="#{assessmentBuilderBean.title}" styleClass="form-control"
+                             style="width:100%;"/>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Descripción</label>
+                <h:inputTextarea value="#{assessmentBuilderBean.description}" rows="2"
+                                 styleClass="form-control" style="width:100%;"/>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                <div class="form-group">
+                    <label class="form-label">Puntaje mínimo para aprobar (%)</label>
+                    <h:inputText value="#{assessmentBuilderBean.passingScorePct}"
+                                 styleClass="form-control" style="width:100%;"/>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Máximo de intentos</label>
+                    <h:inputText value="#{assessmentBuilderBean.maxAttempts}"
+                                 styleClass="form-control" style="width:100%;"/>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Ubicación en el módulo</label>
+                <h:selectOneMenu value="#{assessmentBuilderBean.lessonId}" styleClass="form-control" style="width:100%;">
+                    <f:selectItem itemValue="" itemLabel="— Sin lección asociada —"/>
+                    <f:selectItems value="#{assessmentBuilderBean.lessonOptions}"
+                                   var="lo" itemValue="#{lo.id}" itemLabel="#{lo.label}"/>
+                </h:selectOneMenu>
+            </div>
+        </div>
+
+        <div id="questionsSection" class="card" style="margin-bottom:1.5rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                <h3 style="color:#1a3a6b;margin:0;">Preguntas (#{assessmentBuilderBean.questions.size()})</h3>
+                <h:commandButton value="+ Agregar pregunta" action="#{assessmentBuilderBean.addQuestion}"
+                                 styleClass="btn btn-secondary btn-sm">
+                    <f:ajax execute="@form" render="@form" onevent="onAddQuestion"/>
+                </h:commandButton>
+            </div>
+
+            <ui:repeat value="#{assessmentBuilderBean.questions}" var="q" varStatus="qs">
+                <div class="question-card" style="position:relative;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem;">
+                        <strong style="color:#1a3a6b;">Pregunta #{qs.index + 1}</strong>
+                        <h:commandButton value="✕ Eliminar" styleClass="btn btn-secondary btn-sm"
+                                         style="font-size:.75rem;"
+                                         action="#{assessmentBuilderBean.removeQuestion(qs.index)}"/>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Enunciado *</label>
+                        <h:inputTextarea value="#{q.text}" rows="2" styleClass="form-control" style="width:100%;"/>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:.75rem;">
+                        <div class="form-group">
+                            <label class="form-label">Tipo</label>
+                            <h:selectOneMenu value="#{q.type}" styleClass="form-control"
+                                             onchange="onQTypeChange(this)">
+                                <f:selectItem itemValue="SINGLE_CHOICE"   itemLabel="Opción única"/>
+                                <f:selectItem itemValue="MULTIPLE_CHOICE" itemLabel="Opción múltiple"/>
+                                <f:selectItem itemValue="TRUE_FALSE"      itemLabel="Verdadero/Falso"/>
+                                <f:selectItem itemValue="SHORT_ANSWER"    itemLabel="Respuesta corta"/>
+                            </h:selectOneMenu>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Puntos</label>
+                            <h:inputText value="#{q.points}" styleClass="form-control" style="width:100%;"/>
+                        </div>
+                    </div>
+
+                    <!-- Options section (SINGLE_CHOICE, MULTIPLE_CHOICE, TRUE_FALSE) -->
+                    <div class="opts-wrap">
+                        <label class="form-label" style="font-size:.85rem;">Opciones — marcar la(s) correcta(s)</label>
+                        <ui:repeat value="#{q.options}" var="opt" varStatus="os">
+                            <div class="opt-row" style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;">
+                                <h:selectBooleanCheckbox value="#{opt.correct}"/>
+                                <h:inputText value="#{opt.text}" styleClass="form-control"
+                                             style="flex:1;" placeholder="Opción #{os.index + 1}"/>
+                            </div>
+                        </ui:repeat>
+                    </div>
+
+                    <!-- Short answer section -->
+                    <div class="short-ans-wrap" style="display:none;">
+                        <label class="form-label" style="font-size:.85rem;">
+                            Respuestas correctas
+                            <span style="font-weight:normal;color:#888;">(separadas por coma)</span>
+                        </label>
+                        <h:inputText value="#{q.shortAnswer}" styleClass="form-control" style="width:100%;"
+                                     placeholder="respuesta1, respuesta2, ..."/>
+                    </div>
+                </div>
+            </ui:repeat>
+
+            <h:panelGroup rendered="#{empty assessmentBuilderBean.questions}">
+                <p style="color:#aaa;text-align:center;padding:1rem;">
+                    Haz clic en "Agregar pregunta" para comenzar.
+                </p>
+            </h:panelGroup>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem;">
+            <h3 style="color:#1a3a6b;margin-top:0;">Motor adaptativo</h3>
+            <p style="color:#555;font-size:.9rem;margin-top:0;margin-bottom:1rem;">
+                Cuando un estudiante obtiene un puntaje menor al umbral configurado,
+                el sistema le recomendará automáticamente revisar la lección suplementaria indicada.
+            </p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                <div class="form-group">
+                    <label class="form-label">Umbral de repaso (%)</label>
+                    <h:inputText value="#{assessmentBuilderBean.adaptiveThreshold}"
+                                 styleClass="form-control" style="width:100%;"
+                                 title="Si el puntaje del estudiante es menor a este valor, se activa la recomendación"/>
+                    <small style="color:#888;">Si el estudiante obtiene menos de este porcentaje, se activa el repaso.</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Lección de repaso</label>
+                    <h:selectOneMenu value="#{assessmentBuilderBean.adaptiveSupplementaryLessonId}"
+                                     styleClass="form-control" style="width:100%;">
+                        <f:selectItem itemValue="" itemLabel="— Seleccionar lección —"/>
+                        <f:selectItems value="#{assessmentBuilderBean.supplementaryLessonOptions}"
+                                       var="lo" itemValue="#{lo.id}" itemLabel="#{lo.label}"/>
+                    </h:selectOneMenu>
+                    <small style="color:#888;">Lección que verá el estudiante cuando no supere el umbral.</small>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Mensaje personalizado <span style="font-weight:normal;color:#888;">(opcional)</span></label>
+                <h:inputTextarea value="#{assessmentBuilderBean.adaptiveMessage}" rows="2"
+                                 styleClass="form-control" style="width:100%;"
+                                 placeholder="Ej: Revisa el material del módulo antes de intentarlo de nuevo."/>
+            </div>
+        </div>
+
+        <div style="display:flex;gap:1rem;justify-content:flex-end;">
+            <h:link value="Cancelar" outcome="/views/course-detail"
+                    rendered="#{not empty assessmentBuilderBean.courseId}"
+                    styleClass="btn btn-secondary">
+                <f:param name="courseId" value="#{assessmentBuilderBean.courseId}"/>
+            </h:link>
+            <h:commandButton value="Guardar cambios" action="#{assessmentBuilderBean.save}"
+                             styleClass="btn btn-primary"
+                             onclick="return confirm('¿Guardar los cambios en la evaluación?')"/>
+        </div>
+    </h:form>
+
+    <script>//<![CDATA[
+    function onQTypeChange(sel) {
+        applyQType(sel.closest('.question-card'), sel.value);
+    }
+
+    function applyQType(card, type) {
+        var optsWrap  = card.querySelector('.opts-wrap');
+        var shortWrap = card.querySelector('.short-ans-wrap');
+        var optRows   = optsWrap ? Array.from(optsWrap.querySelectorAll('.opt-row')) : [];
+
+        if (type === 'SHORT_ANSWER') {
+            if (optsWrap)  optsWrap.style.display  = 'none';
+            if (shortWrap) shortWrap.style.display = '';
+        } else if (type === 'TRUE_FALSE') {
+            if (optsWrap)  optsWrap.style.display  = '';
+            if (shortWrap) shortWrap.style.display = 'none';
+            optRows.forEach(function(row, i) {
+                row.style.display = i < 2 ? '' : 'none';
+                if (i < 2) {
+                    var inp = row.querySelector('input[type="text"]');
+                    if (inp && !inp.value.trim()) inp.value = i === 0 ? 'Verdadero' : 'Falso';
+                }
+            });
+        } else {
+            if (optsWrap)  optsWrap.style.display  = '';
+            if (shortWrap) shortWrap.style.display = 'none';
+            optRows.forEach(function(row) { row.style.display = ''; });
+        }
+    }
+
+    function initQTypes() {
+        document.querySelectorAll('.question-card').forEach(function(card) {
+            var sel = card.querySelector('select');
+            if (sel) applyQType(card, sel.value);
+        });
+    }
+
+    function onAddQuestion(data) {
+        if (data.status !== 'success') return;
+        setTimeout(function() {
+            initQTypes();
+            var cards = document.querySelectorAll('.question-card');
+            if (cards.length > 0) cards[cards.length - 1].scrollIntoView({behavior: 'smooth', block: 'nearest'});
+        }, 80);
+    }
+
+    window.addEventListener('load', initQTypes);
+    //]]></script>
+
+</ui:define>
+</ui:composition>
+</html>

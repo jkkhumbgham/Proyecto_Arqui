@@ -1,5 +1,7 @@
 package com.puj.collaboration.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.puj.collaboration.entity.GroupMember;
 import com.puj.collaboration.entity.StudyGroup;
 import com.puj.collaboration.repository.StudyGroupRepository;
@@ -16,6 +18,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -27,13 +30,12 @@ public class StudyGroupService {
     private static final Logger LOG = Logger.getLogger(StudyGroupService.class.getName());
     private static final String ASSESSMENT_URL =
             System.getenv().getOrDefault("ASSESSMENT_SERVICE_URL", "http://assessment-service:8080");
-    private static final double TUTOR_THRESHOLD = 85.0;
 
     @Inject private StudyGroupRepository repo;
     @Inject private AuthenticatedUser     currentUser;
 
-    private final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(3)).build();
+    private final HttpClient   http   = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+    private final ObjectMapper mapper = new ObjectMapper();
 
     @Transactional
     public StudyGroup create(String name, UUID courseId, int maxMembers) {
@@ -44,10 +46,10 @@ public class StudyGroupService {
         g.setMaxMembers(maxMembers);
         repo.save(g);
 
-        // creator joins automatically
         GroupMember m = new GroupMember();
         m.setGroup(g);
         m.setUserId(UUID.fromString(currentUser.getUserId()));
+        m.setTutor(true); // creator is initial tutor
         repo.addMember(m);
         return g;
     }
@@ -61,17 +63,41 @@ public class StudyGroupService {
         if (repo.isMember(groupId, userId)) {
             throw new BadRequestException("Ya eres miembro de este grupo.");
         }
-        if (g.getMembers().stream().filter(m -> !m.isDeleted()).count() >= g.getMaxMembers()) {
+
+        List<GroupMember> currentMembers = repo.findActiveMembers(groupId);
+        if (currentMembers.size() >= g.getMaxMembers()) {
             throw new BadRequestException("El grupo está lleno.");
         }
 
-        GroupMember m = new GroupMember();
-        m.setGroup(g);
-        m.setUserId(userId);
-        repo.addMember(m);
+        // Restore a previous soft-deleted membership instead of inserting a new one
+        // (avoids unique constraint violation on group_id + user_id)
+        GroupMember m = repo.findMemberByGroupAndUserAny(groupId, userId).orElse(null);
+        if (m != null) {
+            m.setTutor(false);
+            m.softRestore();
+            repo.mergeMember(m);
+        } else {
+            m = new GroupMember();
+            m.setGroup(g);
+            m.setUserId(userId);
+            repo.addMember(m);
+        }
 
-        // Check if this student qualifies as tutor (average score > 85%)
         tryAssignTutor(g, userId);
+    }
+
+    @Transactional
+    public void leave(UUID groupId) {
+        UUID userId = UUID.fromString(currentUser.getUserId());
+        GroupMember member = repo.findMemberByGroupAndUser(groupId, userId)
+                .orElseThrow(() -> new BadRequestException("No eres miembro de este grupo."));
+        member.softDelete();
+        repo.mergeMember(member);
+
+        if (member.isTutor()) {
+            StudyGroup g = repo.findById(groupId).orElse(null);
+            if (g != null) tryAssignTutor(g, userId);
+        }
     }
 
     public List<StudyGroup> findByCourse(UUID courseId) {
@@ -79,33 +105,64 @@ public class StudyGroupService {
     }
 
     /**
-     * Queries assessment-service for the student's average score.
-     * If it exceeds TUTOR_THRESHOLD and the group has no tutor yet, assigns them.
-     * Failure is non-fatal — logs a warning and continues.
+     * Elects the member with the highest avg score across all course assessments as tutor.
+     * Failure is non-fatal.
      */
-    private void tryAssignTutor(StudyGroup group, UUID studentId) {
+    private void tryAssignTutor(StudyGroup group, UUID ignoredUserId) {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(ASSESSMENT_URL + "/api/v1/submissions/student/"
-                            + studentId + "/average"))
+            // 1. Get assessment IDs for this course
+            HttpRequest assessReq = HttpRequest.newBuilder()
+                    .uri(URI.create(ASSESSMENT_URL + "/api/v1/assessments/course/" + group.getCourseId()))
                     .header("Authorization", "Bearer " + currentUser.getRawToken())
                     .GET().timeout(Duration.ofSeconds(3)).build();
+            HttpResponse<String> assessResp = http.send(assessReq, HttpResponse.BodyHandlers.ofString());
+            if (assessResp.statusCode() != 200) return;
 
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() == 200) {
-                double avg = Double.parseDouble(resp.body().replaceAll("[^0-9.]", ""));
-                boolean groupHasTutor = group.getMembers().stream()
-                        .anyMatch(m -> !m.isDeleted() && m.getUserId().equals(group.getOwnerId()));
+            List<String> ids = new ArrayList<>();
+            mapper.readTree(assessResp.body()).forEach(n -> {
+                String id = n.path("id").asText();
+                if (!id.isBlank()) ids.add(id);
+            });
+            if (ids.isEmpty()) return;
+            String assessmentIds = String.join(",", ids);
 
-                if (avg >= TUTOR_THRESHOLD) {
-                    LOG.info(String.format(
-                            "Student %s qualifies as tutor (avg=%.1f%%) for group %s",
-                            studentId, avg, group.getId()));
+            // 2. Score each active member
+            List<GroupMember> members = repo.findActiveMembers(group.getId());
+            UUID bestMember = null;
+            double bestScore = -1.0;
+
+            for (GroupMember m : members) {
+                try {
+                    HttpRequest avgReq = HttpRequest.newBuilder()
+                            .uri(URI.create(ASSESSMENT_URL + "/api/v1/submissions/avg-for-assessments?userId="
+                                    + m.getUserId() + "&assessmentIds=" + assessmentIds))
+                            .header("Authorization", "Bearer " + currentUser.getRawToken())
+                            .GET().timeout(Duration.ofSeconds(3)).build();
+                    HttpResponse<String> avgResp = http.send(avgReq, HttpResponse.BodyHandlers.ofString());
+                    if (avgResp.statusCode() == 200) {
+                        JsonNode node = mapper.readTree(avgResp.body());
+                        double avg = node.path("avgScorePct").asDouble(-1.0);
+                        if (avg > bestScore) {
+                            bestScore = avg;
+                            bestMember = m.getUserId();
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            // 3. Update isTutor for all members
+            if (bestMember != null) {
+                final UUID tutorId = bestMember;
+                for (GroupMember m : members) {
+                    boolean shouldBeTutor = m.getUserId().equals(tutorId);
+                    if (m.isTutor() != shouldBeTutor) {
+                        m.setTutor(shouldBeTutor);
+                        repo.mergeMember(m);
+                    }
                 }
             }
         } catch (Exception e) {
-            LOG.log(Level.WARNING,
-                    "Could not evaluate tutor eligibility for student " + studentId, e);
+            LOG.log(Level.WARNING, "Could not elect tutor for group " + group.getId(), e);
         }
     }
 }

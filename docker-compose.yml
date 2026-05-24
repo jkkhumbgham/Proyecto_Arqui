@@ -1,5 +1,3 @@
-version: "3.9"
-
 networks:
   platform-net:
     driver: bridge
@@ -8,6 +6,7 @@ volumes:
   postgres-data:
   redis-data:
   rabbitmq-data:
+  minio-data:
 
 services:
 
@@ -70,6 +69,45 @@ services:
       interval: 15s
       timeout: 10s
       retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: puj-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: puj_minio
+      MINIO_ROOT_PASSWORD: puj_minio_secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - platform-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: puj-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 puj_minio puj_minio_secret &&
+      mc mb --ignore-existing local/course-files &&
+      mc anonymous set download local/course-files &&
+      mc mb --ignore-existing local/certificates &&
+      mc anonymous set download local/certificates &&
+      echo 'MinIO buckets ready'
+      "
+    restart: "no"
+    networks:
+      - platform-net
 
   # ─── Services ────────────────────────────────────────────────────────────────
 
@@ -208,7 +246,7 @@ services:
       dockerfile: Dockerfile
     container_name: puj-analytics-service
     environment:
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=learning_platform;Username=puj_admin;Password=puj_secret;SearchPath=analytics"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=analytics_db;Username=puj_admin;Password=puj_secret"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Port: 5672
       RabbitMQ__Username: puj_rabbit
@@ -216,6 +254,11 @@ services:
       RabbitMQ__VirtualHost: puj_vhost
       Jwt__PublicKey: ${JWT_PUBLIC_KEY}
       ASPNETCORE_URLS: http://+:8080
+      Minio__Endpoint: http://minio:9000
+      Minio__AccessKey: puj_minio
+      Minio__SecretKey: puj_minio_secret
+      Minio__Bucket: certificates
+      Minio__PublicUrl: http://localhost:9000
     ports:
       - "8085:8080"
     depends_on:
@@ -223,6 +266,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     networks:
       - platform-net
 
@@ -274,9 +319,15 @@ services:
       ASSESSMENT_SERVICE_URL: http://assessment-service:8080
       COLLABORATION_SERVICE_URL: http://collaboration-service:8080
       ANALYTICS_SERVICE_URL: http://analytics-service:8080
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: puj_minio
+      MINIO_SECRET_KEY: puj_minio_secret
+      MINIO_BUCKET: course-files
+      MINIO_PUBLIC_URL: http://localhost:9000
     ports:
       - "8080:8080"
     depends_on:
       - user-service
+      - minio-init
     networks:
       - platform-net

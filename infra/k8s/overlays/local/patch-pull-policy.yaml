@@ -1,0 +1,84 @@
+# imagePullPolicy: Never en todos los servicios — las imágenes están en minikube, no en un registry
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: puj-platform
+spec:
+  template:
+    spec:
+      containers:
+        - name: user-service
+          imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: course-service
+  namespace: puj-platform
+spec:
+  template:
+    spec:
+      containers:
+        - name: course-service
+          imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assessment-service
+  namespace: puj-platform
+spec:
+  template:
+    spec:
+      containers:
+        - name: assessment-service
+          imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collaboration-service
+  namespace: puj-platform
+spec:
+  template:
+    spec:
+      containers:
+        - name: collaboration-service
+          imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: puj-platform
+spec:
+  template:
+    spec:
+      containers:
+        - name: analytics-service
+          imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: email-service
+  namespace: puj-platform
+spec:
+  template:
+    spec:
+      containers:
+        - name: email-service
+          imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-ui
+  namespace: puj-platform
+spec:
+  template:
+    spec:
+      containers:
+        - name: web-ui
+          imagePullPolicy: Never

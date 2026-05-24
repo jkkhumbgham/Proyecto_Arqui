@@ -7,6 +7,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
+import jakarta.persistence.NoResultException;
+
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,6 +37,39 @@ public class StudyGroupRepository {
 
     public void addMember(GroupMember member) { em.persist(member); }
 
+    public GroupMember mergeMember(GroupMember m) { return em.merge(m); }
+
+    public List<GroupMember> findActiveMembers(UUID groupId) {
+        return em.createQuery(
+                "SELECT m FROM GroupMember m WHERE m.group.id = :g AND m.deletedAt IS NULL",
+                GroupMember.class)
+                .setParameter("g", groupId).getResultList();
+    }
+
+    public Optional<GroupMember> findMemberByGroupAndUser(UUID groupId, UUID userId) {
+        try {
+            return Optional.of(em.createQuery(
+                    "SELECT m FROM GroupMember m WHERE m.group.id = :g AND m.userId = :u AND m.deletedAt IS NULL",
+                    GroupMember.class)
+                    .setParameter("g", groupId).setParameter("u", userId)
+                    .getSingleResult());
+        } catch (NoResultException e) {
+            return Optional.empty();
+        }
+    }
+
+    public Optional<GroupMember> findMemberByGroupAndUserAny(UUID groupId, UUID userId) {
+        try {
+            return Optional.of(em.createQuery(
+                    "SELECT m FROM GroupMember m WHERE m.group.id = :g AND m.userId = :u",
+                    GroupMember.class)
+                    .setParameter("g", groupId).setParameter("u", userId)
+                    .getSingleResult());
+        } catch (NoResultException e) {
+            return Optional.empty();
+        }
+    }
+
     public boolean isMember(UUID groupId, UUID userId) {
         Long count = em.createQuery(
                 "SELECT COUNT(m) FROM GroupMember m WHERE m.group.id = :g AND m.userId = :u AND m.deletedAt IS NULL",
@@ -46,12 +82,13 @@ public class StudyGroupRepository {
     public void saveMessage(ChatMessage msg) { em.persist(msg); }
 
     public List<ChatMessage> findRecentMessages(UUID groupId, int limit) {
-        return em.createQuery(
+        List<ChatMessage> messages = em.createQuery(
                 "SELECT m FROM ChatMessage m WHERE m.groupId = :g ORDER BY m.sentAt DESC",
                 ChatMessage.class)
                 .setParameter("g", groupId)
                 .setMaxResults(limit)
-                .getResultList()
-                .reversed();
+                .getResultList();
+        Collections.reverse(messages);
+        return messages;
     }
 }

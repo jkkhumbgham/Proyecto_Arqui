@@ -19,24 +19,16 @@ public static class CourseAnalyticsEndpoints
             if (metric == null)
                 return Results.NotFound(new { error = "NOT_FOUND", message = "Sin datos para este curso." });
 
-            var submissions = await db.SubmissionRecords
-                .Where(s => s.CourseId == courseId)
-                .ToListAsync();
-
             return Results.Ok(new {
                 courseId         = metric.CourseId,
                 courseTitle      = metric.CourseTitle,
                 totalEnrollments = metric.TotalEnrollments,
-                totalSubmissions = submissions.Count,
+                totalSubmissions = metric.TotalSubmissions,
                 averageScore     = metric.AverageScore,
                 passRate         = metric.PassRate,
-                avgDurationMin   = submissions.Count > 0
-                    ? submissions.Average(s => s.DurationSeconds) / 60.0
-                    : 0,
                 updatedAt        = metric.UpdatedAt
             });
         })
-        .WithSummary("Métricas de un curso (INSTRUCTOR/ADMIN)")
-        .WithOpenApi();
+        .WithSummary("Métricas de un curso (INSTRUCTOR/ADMIN)");
     }
 }

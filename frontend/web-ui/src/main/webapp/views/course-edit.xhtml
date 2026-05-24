@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Editar curso</ui:define>
+<ui:define name="content">
+
+    <f:event type="preRenderView" listener="#{editBean.load}"/>
+
+    <h:link value="← Volver al curso" outcome="/views/course-detail"
+            styleClass="btn btn-secondary btn-sm"
+            style="margin-bottom:1rem;display:inline-block;">
+        <f:param name="courseId" value="#{editBean.courseId}"/>
+    </h:link>
+
+    <h2 class="page-title">Editar curso</h2>
+
+    <h:messages globalOnly="true" styleClass="alert alert-warn" style="margin-bottom:1rem;"/>
+
+    <div class="card" style="max-width:600px;">
+        <h:form>
+            <h:inputHidden value="#{editBean.courseId}"/>
+
+            <div class="form-group">
+                <label class="form-label">Título *</label>
+                <h:inputText value="#{editBean.courseTitle}" styleClass="form-control" style="width:100%;"/>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Descripción</label>
+                <h:inputTextarea value="#{editBean.courseDescription}" rows="3"
+                                 styleClass="form-control" style="width:100%;"/>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                <div class="form-group">
+                    <label class="form-label">Máximo de estudiantes</label>
+                    <h:inputText value="#{editBean.courseMaxStudents}" styleClass="form-control" style="width:100%;"/>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Estado</label>
+                    <h:selectOneMenu value="#{editBean.courseStatus}" styleClass="form-control" style="width:100%;">
+                        <f:selectItem itemValue="DRAFT"     itemLabel="Borrador"/>
+                        <f:selectItem itemValue="PUBLISHED" itemLabel="Publicado"/>
+                        <f:selectItem itemValue="ARCHIVED"  itemLabel="Archivado"/>
+                    </h:selectOneMenu>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:1rem;margin-top:1.25rem;">
+                <h:link value="Cancelar" outcome="/views/course-detail" styleClass="btn btn-secondary">
+                    <f:param name="courseId" value="#{editBean.courseId}"/>
+                </h:link>
+                <h:commandButton value="Guardar cambios" action="#{editBean.updateCourse}"
+                                 styleClass="btn btn-primary"
+                                 onclick="return confirm('¿Guardar los cambios en el curso?')"/>
+            </div>
+        </h:form>
+    </div>
+
+</ui:define>
+</ui:composition>
+</html>

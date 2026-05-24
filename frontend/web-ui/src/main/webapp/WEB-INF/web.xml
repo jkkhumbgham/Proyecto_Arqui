@@ -6,6 +6,11 @@
         <servlet-name>Faces Servlet</servlet-name>
         <servlet-class>jakarta.faces.webapp.FacesServlet</servlet-class>
         <load-on-startup>1</load-on-startup>
+        <multipart-config>
+            <max-file-size>52428800</max-file-size>      <!-- 50 MB -->
+            <max-request-size>57671680</max-request-size> <!-- 55 MB -->
+            <file-size-threshold>1048576</file-size-threshold> <!-- 1 MB threshold to disk -->
+        </multipart-config>
     </servlet>
     <servlet-mapping>
         <servlet-name>Faces Servlet</servlet-name>

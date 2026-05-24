@@ -8,6 +8,8 @@
         <class>com.puj.courses.entity.Lesson</class>
         <class>com.puj.courses.entity.Enrollment</class>
         <class>com.puj.courses.entity.S3Resource</class>
+        <class>com.puj.courses.entity.LessonProgress</class>
+        <class>com.puj.courses.entity.LessonContent</class>
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
         <properties>
             <property name="jakarta.persistence.schema-generation.database.action" value="update"/>

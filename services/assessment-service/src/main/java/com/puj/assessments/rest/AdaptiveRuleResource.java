@@ -2,7 +2,10 @@ package com.puj.assessments.rest;
 
 import com.puj.assessments.adaptive.AdaptiveEngine;
 import com.puj.assessments.entity.AdaptiveRule;
+import com.puj.assessments.entity.Submission;
+import com.puj.assessments.entity.SubmissionStatus;
 import com.puj.assessments.repository.AdaptiveRuleRepository;
+import com.puj.assessments.repository.SubmissionRepository;
 import com.puj.security.rbac.AuthenticatedUser;
 import com.puj.security.rbac.RequiresRole;
 import com.puj.security.rbac.Role;
@@ -14,6 +17,9 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Path("/adaptive-rules")
@@ -23,6 +29,7 @@ import java.util.UUID;
 public class AdaptiveRuleResource {
 
     @Inject private AdaptiveRuleRepository ruleRepo;
+    @Inject private SubmissionRepository   submissionRepo;
     @Inject private AdaptiveEngine         adaptiveEngine;
     @Inject private AuthenticatedUser      authenticatedUser;
 
@@ -45,6 +52,32 @@ public class AdaptiveRuleResource {
         return ruleRepo.findByAssessment(assessmentId)
                 .map(r -> Response.ok(r).build())
                 .orElse(Response.status(Response.Status.NOT_FOUND).build());
+    }
+
+    /**
+     * Retorna los IDs de lecciones suplementarias desbloqueadas para el estudiante actual
+     * en un curso dado (i.e., evaluaciones donde el estudiante no superó el umbral).
+     */
+    @GET
+    @Path("/unlocked-supplementary")
+    @RequiresRole(Role.STUDENT)
+    @Operation(summary = "Lecciones suplementarias desbloqueadas para el estudiante en un curso")
+    public Response getUnlockedSupplementary(@QueryParam("courseId") UUID courseId) {
+        UUID userId = UUID.fromString(authenticatedUser.getUserId());
+        List<AdaptiveRule> rules = ruleRepo.findByCourse(courseId);
+        List<String> unlockedIds = new ArrayList<>();
+        for (AdaptiveRule rule : rules) {
+            if (rule.getSupplementaryLessonId() == null) continue;
+            List<Submission> subs = submissionRepo.findByUserAndAssessment(userId, rule.getAssessmentId());
+            boolean fired = subs.stream()
+                    .filter(s -> s.getStatus() == SubmissionStatus.GRADED
+                              && s.getMaxScore() != null
+                              && s.getMaxScore().compareTo(BigDecimal.ZERO) > 0)
+                    .anyMatch(s -> s.getScore().doubleValue() / s.getMaxScore().doubleValue() * 100.0
+                                   < rule.getScoreThresholdPct());
+            if (fired) unlockedIds.add(rule.getSupplementaryLessonId().toString());
+        }
+        return Response.ok(unlockedIds).build();
     }
 
     @DELETE

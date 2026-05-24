@@ -27,19 +27,18 @@ if [ -z "$EXISTING_PRIV" ]; then
   openssl genrsa -out "$PRIVATE_KEY_PEM" 2048 2>/dev/null
   openssl rsa -in "$PRIVATE_KEY_PEM" -pubout -out "$PUBLIC_KEY_PEM" 2>/dev/null
 
-  # Escapar saltos de línea para meterlos en .env como una sola línea
+  # Convertir a una sola línea con \n literal (docker compose no admite multilínea en .env)
   PRIV=$(awk '{printf "%s\\n", $0}' "$PRIVATE_KEY_PEM")
   PUB=$(awk '{printf "%s\\n", $0}' "$PUBLIC_KEY_PEM")
 
-  # Sustituir en .env (compatible macOS y Linux)
-  if sed --version 2>/dev/null | grep -q GNU; then
-    sed -i "s|^JWT_PRIVATE_KEY=.*|JWT_PRIVATE_KEY=${PRIV}|" "$ENV_FILE"
-    sed -i "s|^JWT_PUBLIC_KEY=.*|JWT_PUBLIC_KEY=${PUB}|"   "$ENV_FILE"
-  else
-    # macOS sed necesita '' después de -i
-    sed -i '' "s|^JWT_PRIVATE_KEY=.*|JWT_PRIVATE_KEY=${PRIV}|" "$ENV_FILE"
-    sed -i '' "s|^JWT_PUBLIC_KEY=.*|JWT_PUBLIC_KEY=${PUB}|"    "$ENV_FILE"
-  fi
+  # Reescribir el .env con Python para evitar problemas de sed con caracteres especiales
+  python3 - <<PYEOF
+import re, pathlib
+env = pathlib.Path("$ENV_FILE").read_text()
+env = re.sub(r'^JWT_PRIVATE_KEY=.*$', 'JWT_PRIVATE_KEY=${PRIV}', env, flags=re.MULTILINE)
+env = re.sub(r'^JWT_PUBLIC_KEY=.*$',  'JWT_PUBLIC_KEY=${PUB}',   env, flags=re.MULTILINE)
+pathlib.Path("$ENV_FILE").write_text(env)
+PYEOF
 
   echo "✓ Claves RSA generadas y escritas en .env"
   echo "  Archivos PEM guardados en: jwt_private.pem / jwt_public.pem"

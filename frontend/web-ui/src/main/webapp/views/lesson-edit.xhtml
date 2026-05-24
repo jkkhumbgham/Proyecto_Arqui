@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:f="jakarta.faces.core"
+      xmlns:ui="jakarta.faces.facelets">
+<ui:composition template="/WEB-INF/templates/authenticated.xhtml">
+<ui:define name="pageTitle">Contenidos de la lección</ui:define>
+<ui:define name="content">
+
+    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+        <h2 class="page-title" style="margin:0;">
+            #{lessonContentBean.lessonTitle != null ? lessonContentBean.lessonTitle : 'Lección'}
+        </h2>
+    </div>
+
+    <h:messages globalOnly="true" styleClass="alert alert-warn" style="margin-bottom:1rem;"/>
+
+    <div style="display:grid;grid-template-columns:1fr 380px;gap:1.5rem;align-items:start;">
+
+        <!-- Existing contents -->
+        <div>
+            <h3 style="color:#1a3a6b;margin-bottom:1rem;">Contenidos de la lección</h3>
+
+            <h:panelGroup rendered="#{empty lessonContentBean.contents}">
+                <div class="card" style="text-align:center;color:#888;padding:2rem;">
+                    <p>Esta lección aún no tiene contenidos.</p>
+                    <p style="font-size:.875rem;">Agrega el primero usando el formulario.</p>
+                </div>
+            </h:panelGroup>
+
+            <ui:repeat value="#{lessonContentBean.contents}" var="c" varStatus="st">
+                <div class="card" style="margin-bottom:1rem;display:flex;gap:1rem;align-items:flex-start;
+                     #{lessonContentBean.editContentId == c.id ? 'border:2px solid #2980b9;' : ''}">
+                    <!-- Type badge -->
+                    <div style="flex-shrink:0;width:44px;height:44px;border-radius:10px;
+                                background:#eef2ff;display:flex;align-items:center;
+                                justify-content:center;font-size:1.3rem;">
+                        <h:panelGroup rendered="#{c.contentType == 'VIDEO'}">🎥</h:panelGroup>
+                        <h:panelGroup rendered="#{c.contentType == 'PDF'}">📄</h:panelGroup>
+                        <h:panelGroup rendered="#{c.contentType == 'DOCUMENT'}">📋</h:panelGroup>
+                        <h:panelGroup rendered="#{c.contentType == 'TEXT' or c.contentType == null}">📝</h:panelGroup>
+                    </div>
+                    <!-- Info -->
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:600;color:#1a3a6b;margin-bottom:.25rem;">
+                            #{st.index + 1}. #{c.title}
+                        </div>
+                        <div style="font-size:.8rem;color:#888;margin-bottom:.35rem;">
+                            #{c.contentType}
+                            <h:panelGroup rendered="#{c.contentUrl != null}">
+                                · <a href="#{c.contentUrl}" target="_blank"
+                                     style="color:#2980b9;font-size:.8rem;">ver recurso ↗</a>
+                            </h:panelGroup>
+                        </div>
+                        <h:panelGroup rendered="#{not empty c.description}">
+                            <p style="font-size:.875rem;color:#444;margin:0;
+                                      white-space:pre-wrap;line-height:1.5;">#{c.description}</p>
+                        </h:panelGroup>
+                    </div>
+                    <!-- Actions -->
+                    <div style="flex-shrink:0;display:flex;flex-direction:column;gap:.4rem;">
+                        <h:link value="✎ Editar" outcome="/views/lesson-edit"
+                                styleClass="btn btn-secondary btn-sm"
+                                style="font-size:.78rem;white-space:nowrap;">
+                            <f:param name="lessonId"     value="#{lessonContentBean.lessonId}"/>
+                            <f:param name="courseId"     value="#{lessonContentBean.courseId}"/>
+                            <f:param name="editContentId" value="#{c.id}"/>
+                        </h:link>
+                        <h:form style="display:inline;">
+                            <h:commandButton value="✕" styleClass="btn btn-secondary btn-sm"
+                                             style="padding:.25rem .6rem;font-size:.8rem;color:#c0392b;"
+                                             action="#{lessonContentBean.deleteContent(c.id)}"
+                                             onclick="return confirm('¿Eliminar este contenido?')">
+                                <f:param name="lessonId" value="#{lessonContentBean.lessonId}"/>
+                                <f:param name="courseId" value="#{lessonContentBean.courseId}"/>
+                            </h:commandButton>
+                        </h:form>
+                    </div>
+                </div>
+            </ui:repeat>
+        </div>
+
+        <!-- Right panel: Add or Edit -->
+        <div style="position:sticky;top:1rem;">
+
+            <!-- EDIT MODE -->
+            <h:panelGroup rendered="#{lessonContentBean.editMode}">
+                <div class="card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                        <h3 style="color:#1a3a6b;margin:0;font-size:1rem;">Editar contenido</h3>
+                        <h:link value="✕ Cancelar" outcome="/views/lesson-edit"
+                                styleClass="btn btn-secondary btn-sm" style="font-size:.8rem;">
+                            <f:param name="lessonId" value="#{lessonContentBean.lessonId}"/>
+                            <f:param name="courseId" value="#{lessonContentBean.courseId}"/>
+                        </h:link>
+                    </div>
+                    <h:form>
+                        <div class="form-group">
+                            <label class="form-label">Título *</label>
+                            <h:inputText value="#{lessonContentBean.editTitle}" styleClass="form-control"
+                                         style="width:100%;"/>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Tipo</label>
+                            <h:selectOneMenu value="#{lessonContentBean.editContentType}" styleClass="form-control"
+                                             style="width:100%;" onchange="toggleEditFields(this.value)">
+                                <f:selectItem itemValue="TEXT"     itemLabel="Texto"/>
+                                <f:selectItem itemValue="VIDEO"    itemLabel="Video (YouTube)"/>
+                                <f:selectItem itemValue="PDF"      itemLabel="PDF"/>
+                                <f:selectItem itemValue="DOCUMENT" itemLabel="Documento"/>
+                            </h:selectOneMenu>
+                        </div>
+
+                        <div id="editUrlField" class="form-group">
+                            <label class="form-label">URL del recurso</label>
+                            <h:inputText value="#{lessonContentBean.editContentUrl}" styleClass="form-control"
+                                         style="width:100%;" placeholder="https://..."/>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Descripción</label>
+                            <h:inputTextarea value="#{lessonContentBean.editDescription}" rows="5"
+                                             styleClass="form-control" style="width:100%;font-family:inherit;"
+                                             placeholder="Descripción del contenido..."/>
+                        </div>
+
+                        <h:commandButton value="Guardar cambios" action="#{lessonContentBean.updateContent}"
+                                         styleClass="btn btn-primary" style="width:100%;"
+                                         onclick="return confirm('¿Guardar los cambios en este contenido?')">
+                            <f:param name="lessonId"      value="#{lessonContentBean.lessonId}"/>
+                            <f:param name="courseId"      value="#{lessonContentBean.courseId}"/>
+                            <f:param name="editContentId" value="#{lessonContentBean.editContentId}"/>
+                        </h:commandButton>
+                    </h:form>
+                </div>
+            </h:panelGroup>
+
+            <!-- ADD MODE -->
+            <h:panelGroup rendered="#{not lessonContentBean.editMode}">
+                <div class="card">
+                    <h3 style="color:#1a3a6b;margin-bottom:1rem;font-size:1rem;">Agregar contenido</h3>
+                    <h:form enctype="multipart/form-data">
+                        <h:inputHidden value="#{lessonContentBean.lessonId}"/>
+                        <h:inputHidden value="#{lessonContentBean.courseId}"/>
+
+                        <div class="form-group">
+                            <label class="form-label">Título *</label>
+                            <h:inputText value="#{lessonContentBean.newTitle}" styleClass="form-control"
+                                         style="width:100%;" placeholder="Ej: Introducción teórica"/>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Tipo</label>
+                            <h:selectOneMenu value="#{lessonContentBean.newContentType}" styleClass="form-control"
+                                             style="width:100%;" onchange="toggleContentFields(this.value)">
+                                <f:selectItem itemValue="TEXT"     itemLabel="Texto"/>
+                                <f:selectItem itemValue="VIDEO"    itemLabel="Video (YouTube)"/>
+                                <f:selectItem itemValue="PDF"      itemLabel="PDF"/>
+                                <f:selectItem itemValue="DOCUMENT" itemLabel="Documento"/>
+                            </h:selectOneMenu>
+                        </div>
+
+                        <div id="urlField" class="form-group" style="display:none;">
+                            <label class="form-label">URL del video</label>
+                            <h:inputText value="#{lessonContentBean.newContentUrl}" styleClass="form-control"
+                                         style="width:100%;" placeholder="https://youtube.com/watch?v=..."/>
+                        </div>
+
+                        <div id="uploadField" class="form-group" style="display:none;">
+                            <label class="form-label">Subir archivo</label>
+                            <h:inputFile value="#{lessonContentBean.uploadedFile}" styleClass="form-control"
+                                         style="width:100%;"/>
+                            <small style="color:#888;display:block;margin-top:.25rem;">Máximo 50 MB.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">
+                                Descripción
+                                <span style="font-size:.8rem;color:#888;font-weight:normal;">
+                                    (resumen, instrucciones, o el texto completo)
+                                </span>
+                            </label>
+                            <h:inputTextarea value="#{lessonContentBean.newDescription}" rows="5"
+                                             styleClass="form-control" style="width:100%;font-family:inherit;"
+                                             placeholder="Descripción del contenido..."/>
+                        </div>
+
+                        <h:commandButton value="Agregar contenido" action="#{lessonContentBean.addContent}"
+                                         styleClass="btn btn-primary" style="width:100%;"/>
+                    </h:form>
+                </div>
+            </h:panelGroup>
+
+        </div>
+    </div>
+
+    <!-- Bottom action bar -->
+    <div style="display:flex;justify-content:flex-end;gap:1rem;margin-top:2rem;
+                padding-top:1.25rem;border-top:1px solid #e0e6f0;">
+        <h:link outcome="/views/course-detail" styleClass="btn btn-secondary"
+                onclick="return confirm('¿Volver al curso? Los contenidos ya guardados se conservarán.');">
+            <f:param name="courseId" value="#{lessonContentBean.courseId}"/>
+            Volver
+        </h:link>
+        <h:link outcome="/views/course-detail" styleClass="btn btn-primary">
+            <f:param name="courseId" value="#{lessonContentBean.courseId}"/>
+            Publicar lección
+        </h:link>
+    </div>
+
+    <script>
+    function toggleContentFields(type) {
+        document.getElementById('urlField').style.display    = (type === 'VIDEO')                      ? '' : 'none';
+        document.getElementById('uploadField').style.display = (type === 'PDF' || type === 'DOCUMENT') ? '' : 'none';
+    }
+    function toggleEditFields(type) {
+        var f = document.getElementById('editUrlField');
+        if (f) f.style.display = (type === 'TEXT') ? 'none' : '';
+    }
+    </script>
+
+</ui:define>
+</ui:composition>
+</html>

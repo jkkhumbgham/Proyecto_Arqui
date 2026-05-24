@@ -1,6 +1,7 @@
 package com.puj.courses.rest;
 
 import com.puj.courses.dto.EnrollmentResponse;
+import com.puj.courses.repository.EnrollmentRepository;
 import com.puj.courses.service.EnrollmentService;
 import com.puj.security.rbac.AuthenticatedUser;
 import com.puj.security.rbac.RequiresRole;
@@ -12,8 +13,10 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
-import java.util.List;
-import java.util.UUID;
+import java.time.Instant;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.Arrays;
 
 @Path("/enrollments")
 @Produces(MediaType.APPLICATION_JSON)
@@ -21,8 +24,9 @@ import java.util.UUID;
 @Tag(name = "Inscripciones")
 public class EnrollmentResource {
 
-    @Inject private EnrollmentService enrollmentService;
-    @Inject private AuthenticatedUser  authenticatedUser;
+    @Inject private EnrollmentService    enrollmentService;
+    @Inject private EnrollmentRepository enrollmentRepo;
+    @Inject private AuthenticatedUser    authenticatedUser;
 
     @POST
     @Path("/courses/{courseId}")
@@ -41,6 +45,83 @@ public class EnrollmentResource {
     public List<EnrollmentResponse> myEnrollments() {
         UUID userId = UUID.fromString(authenticatedUser.getUserId());
         return enrollmentService.findByUser(userId);
+    }
+
+    @GET
+    @Path("/course/{courseId}/stats")
+    @RequiresRole({Role.INSTRUCTOR, Role.ADMIN})
+    @Operation(summary = "Estadísticas de inscripción por curso (INSTRUCTOR/ADMIN)")
+    public Response courseStats(@PathParam("courseId") UUID courseId) {
+        long enrolledCount    = enrollmentRepo.countByCourse(courseId);
+        double avgProgressPct = enrollmentRepo.avgProgressPct(courseId);
+
+        // For each student, keep only the module of their most recent lesson completion
+        List<Object[]> rawRows = enrollmentRepo.latestModulePerUser(courseId);
+
+        // [userId] -> row with max completedAt across all modules
+        Map<UUID, Object[]> latestPerUser = new LinkedHashMap<>();
+        for (Object[] row : rawRows) {
+            UUID    userId      = (UUID) row[0];
+            Instant completedAt = (Instant) row[4];
+            Object[] current    = latestPerUser.get(userId);
+            if (current == null || completedAt.isAfter((Instant) current[4])) {
+                latestPerUser.put(userId, row);
+            }
+        }
+
+        // Aggregate count per module preserving order
+        Map<String, long[]>   moduleCounts = new LinkedHashMap<>();
+        Map<String, Object[]> moduleMeta   = new LinkedHashMap<>(); // moduleId -> [title, orderIndex]
+        for (Object[] row : latestPerUser.values()) {
+            String moduleId    = row[1].toString();
+            String moduleTitle = row[2].toString();
+            int    orderIndex  = ((Number) row[3]).intValue();
+            moduleCounts.computeIfAbsent(moduleId, k -> new long[]{0})[0]++;
+            moduleMeta.put(moduleId, new Object[]{moduleTitle, orderIndex});
+        }
+
+        List<Map<String, Object>> moduleDistribution = moduleCounts.entrySet().stream()
+                .sorted(Comparator.comparingInt(e -> (int) ((Object[]) moduleMeta.get(e.getKey()))[1]))
+                .map(e -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("moduleId",     e.getKey());
+                    m.put("moduleTitle",  ((Object[]) moduleMeta.get(e.getKey()))[0]);
+                    m.put("studentCount", e.getValue()[0]);
+                    return m;
+                })
+                .collect(Collectors.toList());
+
+        // Prepend "no han comenzado" bucket if applicable
+        long notStarted = enrollmentRepo.countNotStarted(courseId);
+        if (notStarted > 0) {
+            Map<String, Object> ns = new LinkedHashMap<>();
+            ns.put("moduleId",    "not-started");
+            ns.put("moduleTitle", "No han comenzado el curso");
+            ns.put("studentCount", notStarted);
+            moduleDistribution.add(0, ns);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("enrolledCount",      enrolledCount);
+        result.put("avgProgressPct",     Math.round(avgProgressPct * 10.0) / 10.0);
+        result.put("moduleDistribution", moduleDistribution);
+
+        return Response.ok(result).build();
+    }
+
+    @GET
+    @Path("/unique-students")
+    @RequiresRole({Role.INSTRUCTOR, Role.ADMIN, Role.DIRECTOR})
+    @Operation(summary = "Cantidad de estudiantes únicos en un conjunto de cursos (INSTRUCTOR/ADMIN)")
+    public Response uniqueStudents(@QueryParam("courseIds") String courseIdsParam) {
+        if (courseIdsParam == null || courseIdsParam.isBlank())
+            return Response.ok(Map.of("uniqueStudents", 0L)).build();
+        List<UUID> ids = Arrays.stream(courseIdsParam.split(","))
+                .map(String::trim).filter(s -> !s.isBlank())
+                .map(UUID::fromString)
+                .collect(Collectors.toList());
+        long count = enrollmentRepo.countUniqueStudentsInCourses(ids);
+        return Response.ok(Map.of("uniqueStudents", count)).build();
     }
 
     @DELETE

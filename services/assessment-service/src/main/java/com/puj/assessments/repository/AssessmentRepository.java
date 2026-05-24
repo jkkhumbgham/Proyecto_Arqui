@@ -25,6 +25,13 @@ public class AssessmentRepository {
                 .filter(a -> !a.isDeleted());
     }
 
+    public List<Assessment> findAll() {
+        return em.createQuery(
+                        "SELECT a FROM Assessment a WHERE a.deletedAt IS NULL ORDER BY a.createdAt",
+                        Assessment.class)
+                .getResultList();
+    }
+
     public List<Assessment> findByCourse(UUID courseId) {
         return em.createQuery(
                         "SELECT a FROM Assessment a WHERE a.courseId = :cid AND a.deletedAt IS NULL ORDER BY a.createdAt",
@@ -33,9 +40,18 @@ public class AssessmentRepository {
                 .getResultList();
     }
 
+    public List<Assessment> findByInstructor(UUID instructorId) {
+        return em.createQuery(
+                        "SELECT a FROM Assessment a WHERE a.instructorId = :iid AND a.deletedAt IS NULL ORDER BY a.createdAt",
+                        Assessment.class)
+                .setParameter("iid", instructorId)
+                .getResultList();
+    }
+
     public long countAttempts(UUID userId, UUID assessmentId) {
         return em.createQuery(
-                        "SELECT COUNT(s) FROM Submission s WHERE s.userId = :uid AND s.assessment.id = :aid",
+                        "SELECT COUNT(s) FROM Submission s WHERE s.userId = :uid AND s.assessment.id = :aid" +
+                        " AND s.status IN (com.puj.assessments.entity.SubmissionStatus.SUBMITTED, com.puj.assessments.entity.SubmissionStatus.GRADED)",
                         Long.class)
                 .setParameter("uid", userId)
                 .setParameter("aid", assessmentId)
