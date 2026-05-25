@@ -9,7 +9,6 @@ public class AnalyticsDbContext(DbContextOptions<AnalyticsDbContext> options)
     public DbSet<PlatformStats>    PlatformStats     { get; set; }
     public DbSet<StudentNameCache> StudentNameCaches { get; set; }
     public DbSet<CourseMetric>     CourseMetrics     { get; set; }
-    public DbSet<Certificate>      Certificates      { get; set; }
     public DbSet<MonthlySnapshot>  MonthlySnapshots  { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -57,21 +56,6 @@ public class AnalyticsDbContext(DbContextOptions<AnalyticsDbContext> options)
             e.HasIndex(x => x.CourseId).IsUnique();
             e.Ignore(x => x.AverageScore);
             e.Ignore(x => x.PassRate);
-        });
-
-        modelBuilder.Entity<Certificate>(e => {
-            e.ToTable("certificates");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.StudentId).HasColumnName("student_id");
-            e.Property(x => x.CourseId).HasColumnName("course_id");
-            e.Property(x => x.CourseTitle).HasColumnName("course_title");
-            e.Property(x => x.StudentName).HasColumnName("student_name");
-            e.Property(x => x.InstructorName).HasColumnName("instructor_name");
-            e.Property(x => x.VerificationCode).HasColumnName("verification_code");
-            e.Property(x => x.PdfUrl).HasColumnName("pdf_url");
-            e.Property(x => x.IssuedAt).HasColumnName("issued_at");
-            e.HasIndex(x => new { x.StudentId, x.CourseId }).IsUnique();
         });
 
         modelBuilder.Entity<MonthlySnapshot>(e => {

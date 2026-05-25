@@ -101,8 +101,6 @@ services:
       mc alias set local http://minio:9000 puj_minio puj_minio_secret &&
       mc mb --ignore-existing local/course-files &&
       mc anonymous set download local/course-files &&
-      mc mb --ignore-existing local/certificates &&
-      mc anonymous set download local/certificates &&
       echo 'MinIO buckets ready'
       "
     restart: "no"
@@ -254,11 +252,6 @@ services:
       RabbitMQ__VirtualHost: puj_vhost
       Jwt__PublicKey: ${JWT_PUBLIC_KEY}
       ASPNETCORE_URLS: http://+:8080
-      Minio__Endpoint: http://minio:9000
-      Minio__AccessKey: puj_minio
-      Minio__SecretKey: puj_minio_secret
-      Minio__Bucket: certificates
-      Minio__PublicUrl: http://localhost:9000
     ports:
       - "8085:8080"
     depends_on:
@@ -266,8 +259,6 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
     networks:
       - platform-net
 
@@ -286,7 +277,8 @@ services:
       SMTP_PORT: 1025
       SMTP_USER: ""
       SMTP_PASSWORD: ""
-      SMTP_FROM: no-reply@puj.edu.co
+      SMTP_FROM: plataforma@educacion.edu.co
+      SMTP_FROM_NAME: "Plataforma Adaptativa"
       SMTP_ENABLED: "true"
       SMTP_AUTH: "false"
       SMTP_STARTTLS: "false"

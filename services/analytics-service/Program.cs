@@ -40,8 +40,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // ─── Services ─────────────────────────────────────────────────────────────────
-builder.Services.AddSingleton<MinioStorageService>();
-builder.Services.AddScoped<CertificateService>();
 builder.Services.AddHostedService<MonthlySnapshotJob>();
 
 // ─── MassTransit / RabbitMQ ────────────────────────────────────────────────────
@@ -116,7 +114,6 @@ app.MapDashboardEndpoints();
 app.MapCourseAnalyticsEndpoints();
 app.MapStudentProgressEndpoints();
 app.MapExportEndpoints();
-app.MapCertificateEndpoints();
 app.MapMonthlySnapshotEndpoints();
 
 app.MapGet("/health", () => Results.Ok(new { status = "UP", timestamp = DateTime.UtcNow }))

@@ -14,6 +14,7 @@ import jakarta.inject.Inject;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
@@ -74,15 +75,19 @@ public class EmailConsumer {
 
     private void runConsumer() {
         while (running) {
+            CountDownLatch closeLatch = new CountDownLatch(1);
             try {
                 connect();
+                // Release latch when channel or connection shuts down
+                channel.addShutdownListener(cause -> closeLatch.countDown());
                 LOG.info("Conectado a RabbitMQ — esperando mensajes en: " + QUEUE);
-                // basicConsume bloqueante; sale solo por error o shutdown
-                channel.basicConsume(QUEUE, false, this::handleDelivery, tag -> {});
-                // si llegamos aquí sin excepción, el canal fue cancelado
+                channel.basicConsume(QUEUE, false, this::handleDelivery, tag -> closeLatch.countDown());
+                // Block this thread until the channel closes
+                closeLatch.await();
             } catch (Exception e) {
                 if (!running) break;
                 LOG.log(Level.WARNING, "Conexión RabbitMQ perdida — reintentando en 5s", e);
+                closeLatch.countDown();
                 sleep(5_000);
             }
         }
@@ -101,7 +106,8 @@ public class EmailConsumer {
 
         connection = factory.newConnection();
         channel    = connection.createChannel();
-        channel.basicQos(1); // procesar un mensaje a la vez (prefetch)
+        channel.basicQos(1);
+        // Topology (exchange, queue, binding) is declared via infra/rabbitmq/definitions.json
     }
 
     // ── Procesamiento de mensajes ──────────────────────────────────────────────
@@ -119,7 +125,9 @@ public class EmailConsumer {
                     event.getRecipientEmail(),
                     event.getRecipientName(),
                     email.subject(),
-                    email.htmlBody());
+                    email.htmlBody(),
+                    email.fromEmail(),
+                    email.fromName());
 
             if (sent) {
                 channel.basicAck(deliveryTag, false);

@@ -21,9 +21,6 @@ public class SmtpEmailService {
     private static final int     SMTP_PORT     = Integer.parseInt(System.getenv().getOrDefault("SMTP_PORT", "1025"));
     private static final String  SMTP_USER     = System.getenv().getOrDefault("SMTP_USER",     "");
     private static final String  SMTP_PASS     = System.getenv().getOrDefault("SMTP_PASSWORD", "");
-    private static final String  FROM_ADDR     = System.getenv().getOrDefault("SMTP_FROM",     "no-reply@puj.edu.co");
-    private static final String  FROM_NAME     = System.getenv().getOrDefault("SMTP_FROM_NAME",
-            "Plataforma de Aprendizaje PUJ");
     private static final boolean SMTP_ENABLED  =
             Boolean.parseBoolean(System.getenv().getOrDefault("SMTP_ENABLED",  "true"));
     // false por defecto → compatible con MailHog; true en producción con SMTP real
@@ -67,7 +64,8 @@ public class SmtpEmailService {
      *
      * @return true si el envío fue exitoso, false si falló (el llamador decide si reintentar)
      */
-    public boolean send(String toAddress, String toName, String subject, String htmlBody) {
+    public boolean send(String toAddress, String toName, String subject, String htmlBody,
+                        String fromEmail, String fromName) {
         if (!SMTP_ENABLED) {
             LOG.info("SMTP deshabilitado — simulando envío a " + toAddress + " | " + subject);
             return true;
@@ -75,7 +73,7 @@ public class SmtpEmailService {
 
         try {
             MimeMessage message = new MimeMessage(mailSession);
-            message.setFrom(new InternetAddress(FROM_ADDR, FROM_NAME));
+            message.setFrom(new InternetAddress(fromEmail, fromName));
             message.setRecipient(Message.RecipientType.TO,
                     new InternetAddress(toAddress, toName));
             message.setSubject(subject, "UTF-8");

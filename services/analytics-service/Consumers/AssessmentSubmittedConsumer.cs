@@ -3,13 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using Puj.Analytics.Data;
 using Puj.Analytics.Messages;
 using Puj.Analytics.Models;
-using Puj.Analytics.Services;
 
 namespace Puj.Analytics.Consumers;
 
 public class AssessmentSubmittedConsumer(
     AnalyticsDbContext db,
-    CertificateService certificateService,
     ILogger<AssessmentSubmittedConsumer> logger)
     : IConsumer<AssessmentSubmittedMessage>
 {
@@ -17,7 +15,6 @@ public class AssessmentSubmittedConsumer(
     {
         var msg      = context.Message;
         var courseId = Guid.Parse(msg.CourseId);
-        var userId   = Guid.Parse(msg.UserId);
         logger.LogInformation("Processing ASSESSMENT_SUBMITTED: {SubmissionId}", msg.SubmissionId);
 
         // ── Platform-wide counters ────────────────────────────────────────────
@@ -50,29 +47,5 @@ public class AssessmentSubmittedConsumer(
         metric.UpdatedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync();
-
-        // ── Certificate ───────────────────────────────────────────────────────
-        if (msg.AllAssessmentsPassed)
-            await TryIssueCertificate(userId, courseId, metric.CourseTitle);
-    }
-
-    private async Task TryIssueCertificate(Guid studentId, Guid courseId, string courseTitle)
-    {
-        try
-        {
-            var alreadyCertified = await db.Certificates
-                .AnyAsync(c => c.StudentId == studentId && c.CourseId == courseId);
-            if (alreadyCertified) return;
-
-            var cache       = await db.StudentNameCaches.FirstOrDefaultAsync(c => c.UserId == studentId);
-            string name     = cache?.StudentName ?? "Estudiante";
-
-            await certificateService.IssueCertificate(
-                studentId, courseId, courseTitle, name, "PUJ Learning Platform");
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Error al emitir certificado student={S} course={C}", studentId, courseId);
-        }
     }
 }

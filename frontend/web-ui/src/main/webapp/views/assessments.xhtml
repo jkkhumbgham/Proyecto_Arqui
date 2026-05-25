@@ -154,15 +154,37 @@
                                     <p style="font-size:.85rem;color:#888;margin:.4rem 0;">
                                         Puntaje total: <strong>#{a.totalPoints}</strong> pts
                                     </p>
-                                    <h:form style="margin-top:.75rem;">
-                                        <h:commandButton value="Iniciar evaluación"
-                                                         action="#{assessmentBean.startSubmission}"
-                                                         styleClass="btn btn-primary btn-sm">
-                                            <f:setPropertyActionListener
-                                                    target="#{assessmentBean.selectedAssessmentId}"
-                                                    value="#{a.id}"/>
-                                        </h:commandButton>
-                                    </h:form>
+
+                                    <!-- Mejor calificación (solo si ya intentó al menos una vez) -->
+                                    <h:panelGroup rendered="#{a.hasAttempted}">
+                                        <p style="font-size:.85rem;margin:.3rem 0;">
+                                            Mejor nota:
+                                            <strong style="color:#{a.bestScorePassing ? '#16a34a' : '#dc2626'}">#{a.bestScorePct}%</strong>
+                                            <span style="font-size:.8rem;color:#888;">
+                                                · #{a.attemptsUsed} de #{a.maxAttempts} intento(s) usado(s)
+                                            </span>
+                                        </p>
+                                    </h:panelGroup>
+
+                                    <!-- Aviso cuando no quedan intentos -->
+                                    <h:panelGroup rendered="#{a.attemptsExhausted}">
+                                        <p style="font-size:.82rem;color:#dc2626;font-weight:600;margin:.4rem 0;">
+                                            Sin intentos disponibles
+                                        </p>
+                                    </h:panelGroup>
+
+                                    <!-- Botón solo si aún quedan intentos -->
+                                    <h:panelGroup rendered="#{!a.attemptsExhausted}">
+                                        <h:form style="margin-top:.75rem;">
+                                            <h:commandButton value="Iniciar evaluación"
+                                                             action="#{assessmentBean.startSubmission}"
+                                                             styleClass="btn btn-primary btn-sm">
+                                                <f:setPropertyActionListener
+                                                        target="#{assessmentBean.selectedAssessmentId}"
+                                                        value="#{a.id}"/>
+                                            </h:commandButton>
+                                        </h:form>
+                                    </h:panelGroup>
                                 </div>
                             </ui:repeat>
                         </div>

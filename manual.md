@@ -16,10 +16,6 @@
 9. [Probar el sistema comando a comando](#9-probar-el-sistema-comando-a-comando)
    - 9.1 Registro e inicio de sesión
    - 9.10 Búsqueda con caché Redis
-   - 9.11 Gamificación
-   - 9.12 Certificados
-   - 9.13 Notificaciones in-app
-   - 9.14 Rutas de aprendizaje
 10. [Ejecutar los tests unitarios](#10-ejecutar-los-tests-unitarios)
 11. [Mapa de puertos (local)](#11-mapa-de-puertos-local)
 
@@ -224,20 +220,15 @@ Hay cuatro roles en el sistema. Lo que se muestra en pantalla cambia completamen
 1. Registro en `/views/register` — marcar la casilla de consentimiento (Ley 1581).
 2. Tras registrarse, abrir **http://localhost:8025** (MailHog) para ver el correo de bienvenida.
 3. Iniciar sesión → redirige al dashboard de estudiante.
-4. Dashboard muestra: cursos inscritos con progreso, rutas de aprendizaje y botones de acceso rápido.
+4. Dashboard muestra: cursos inscritos con progreso y botones de acceso rápido.
 5. Desde `/views/courses` explorar el catálogo, usar la búsqueda por texto o categoría, e inscribirse.
-6. Desde `/views/learning-paths` ver e inscribirse en rutas de aprendizaje.
-7. Al completar lecciones y aprobar evaluaciones se acumulan puntos y se desbloquean insignias.
-8. Al aprobar todas las evaluaciones de un curso se genera automáticamente un certificado PDF descargable desde `/views/certificates`.
-9. Las notificaciones in-app llegan automáticamente (lección completada, certificado listo, etc.).
 
 #### INSTRUCTOR
 
 1. El ADMIN asigna el rol. El instructor inicia sesión y va al dashboard.
 2. Dashboard muestra sus cursos (DRAFT / PUBLISHED) con acceso directo a gestión.
 3. Crea cursos con categoría → módulos → lecciones → contenidos (texto/video/PDF).
-4. Crea rutas de aprendizaje desde `/views/learning-path-create` (selecciona cursos en orden).
-5. Construye evaluaciones desde `/views/assessment-builder?courseId=…`.
+4. Construye evaluaciones desde `/views/assessment-builder?courseId=…`.
 6. Configura el umbral adaptativo: porcentaje mínimo y lección de refuerzo si no lo alcanza.
 
 #### DIRECTOR
@@ -259,11 +250,8 @@ http://localhost:8080/views/login               → Inicio de sesión
 http://localhost:8080/views/register            → Registro con consentimiento
 http://localhost:8080/views/dashboard           → Dashboard según rol
 http://localhost:8080/views/courses             → Catálogo con búsqueda
-http://localhost:8080/views/learning-paths      → Rutas de aprendizaje
 http://localhost:8080/views/assessments         → Evaluaciones del estudiante
 http://localhost:8080/views/forums              → Foros colaborativos
-http://localhost:8080/views/profile             → Perfil, puntos e insignias
-http://localhost:8080/views/certificates        → Mis certificados (STUDENT)
 ```
 
 ### Ver los correos que llegan
@@ -275,7 +263,6 @@ Cada acción importante dispara un correo. En desarrollo local todos caen en **M
 | Registro | Bienvenida + aviso Ley 1581 |
 | Inscripción en curso | Confirmación de matrícula |
 | Evaluación calificada | Nota + recomendación adaptativa (si aplica) |
-| Completar curso | Felicitaciones + constancia |
 | Solicitud de reset de contraseña | Enlace de reset |
 
 ---
@@ -417,8 +404,6 @@ docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers
 | Cola | Qué contiene |
 |---|---|
 | `analytics.results` | Eventos de calificaciones, inscripciones y registros para métricas |
-| `gamification.events` | Eventos de lecciones, evaluaciones y foros para otorgar puntos |
-| `notifications.events` | Eventos para generar notificaciones in-app del estudiante |
 | `email.notifications` | Correos pendientes de enviar |
 | `dead.letter.queue` | Mensajes que fallaron después de 3 reintentos |
 
@@ -771,81 +756,7 @@ docker compose exec redis redis-cli KEYS "search:*"
 docker compose exec redis redis-cli TTL "search:java::newest:0:12"
 ```
 
-### 9.11 Probar gamificación
-
-```bash
-# Ver puntos de un usuario
-curl -s "http://localhost:8081/api/v1/users/me/points" \
-  -H "Authorization: Bearer $TOKEN" | jq
-
-# Ver insignias
-curl -s "http://localhost:8081/api/v1/users/me/badges" \
-  -H "Authorization: Bearer $TOKEN" | jq
-
-# Ver reglas en base de datos
-docker compose exec postgres psql -U puj_admin -d learning_platform \
-  -c "SELECT action_type, points FROM users.gamification_rules ORDER BY points DESC;"
-```
-
-### 9.12 Probar certificados
-
-```bash
-# Ver certificados de un estudiante
-STUDENT_TOKEN=$(curl -s -X POST http://localhost:8081/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"andres.mora@puj.edu.co","password":"Estudiante1!"}' \
-  | jq -r '.accessToken')
-
-STUDENT_ID=$(curl -s -X POST http://localhost:8081/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"andres.mora@puj.edu.co","password":"Estudiante1!"}' \
-  | jq -r '.user.id')
-
-curl -s "http://localhost:8085/api/v1/certificates/student/$STUDENT_ID" \
-  -H "Authorization: Bearer $STUDENT_TOKEN" | jq '.[0].courseTitle'
-
-# Verificar un certificado por código (público)
-VERIFICATION_CODE="<uuid-del-certificado>"
-curl -s "http://localhost:8085/api/v1/certificates/verify/$VERIFICATION_CODE" | jq
-
-# Listar certificados en MinIO
-docker compose exec minio mc ls local/certificates/ --recursive
-```
-
-### 9.13 Probar notificaciones in-app
-
-```bash
-# Ver mis notificaciones
-curl -s "http://localhost:8084/api/v1/notifications" \
-  -H "Authorization: Bearer $TOKEN" | jq '.[0]'
-
-# Contar no leídas
-curl -s "http://localhost:8084/api/v1/notifications/unread-count" \
-  -H "Authorization: Bearer $TOKEN" | jq
-
-# Marcar todas como leídas
-curl -s -X PATCH "http://localhost:8084/api/v1/notifications/read-all" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### 9.14 Probar rutas de aprendizaje
-
-```bash
-# Listar rutas publicadas
-curl -s "http://localhost:8082/api/v1/learning-paths?status=PUBLISHED" \
-  -H "Authorization: Bearer $TOKEN" | jq '.[0].title'
-
-# Inscribirse en una ruta
-PATH_ID="<uuid-de-la-ruta>"
-curl -s -X POST "http://localhost:8082/api/v1/learning-paths/$PATH_ID/enroll" \
-  -H "Authorization: Bearer $TOKEN" | jq
-
-# Ver progreso en la ruta
-curl -s "http://localhost:8082/api/v1/learning-paths/$PATH_ID/progress" \
-  -H "Authorization: Bearer $TOKEN" | jq
-```
-
-### 9.15 Simular fallo de Redis (fallback adaptativo)
+### 9.11 Simular fallo de Redis (fallback adaptativo)
 
 ```bash
 # Parar Redis

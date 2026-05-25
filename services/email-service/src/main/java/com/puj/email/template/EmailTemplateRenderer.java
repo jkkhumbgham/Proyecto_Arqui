@@ -12,16 +12,31 @@ import java.util.Map;
 @ApplicationScoped
 public class EmailTemplateRenderer {
 
-    public record RenderedEmail(String subject, String htmlBody) {}
+    public record RenderedEmail(String subject, String htmlBody, String fromEmail, String fromName) {}
+
+    private static final String GLOBAL_FROM      = System.getenv().getOrDefault("SMTP_FROM",      "no-reply@puj.edu.co");
+    private static final String GLOBAL_FROM_NAME = System.getenv().getOrDefault("SMTP_FROM_NAME", "Plataforma de Aprendizaje PUJ");
 
     public RenderedEmail render(EmailNotificationEvent event) {
-        return switch (event.getEmailType()) {
+        RenderedEmail base = switch (event.getEmailType()) {
             case WELCOME               -> renderWelcome(event);
             case ENROLLMENT_CONFIRMED  -> renderEnrollmentConfirmed(event);
             case ASSESSMENT_GRADED     -> renderAssessmentGraded(event);
             case COURSE_COMPLETED      -> renderCourseCompleted(event);
             case PASSWORD_RESET        -> renderPasswordReset(event);
         };
+        return new RenderedEmail(base.subject(), base.htmlBody(),
+                resolveFrom(event.getEmailType()), resolveFromName(event.getEmailType()));
+    }
+
+    private String resolveFrom(EmailNotificationEvent.EmailType type) {
+        String specific = System.getenv("SMTP_FROM_" + type.name());
+        return specific != null && !specific.isBlank() ? specific : GLOBAL_FROM;
+    }
+
+    private String resolveFromName(EmailNotificationEvent.EmailType type) {
+        String specific = System.getenv("SMTP_FROM_NAME_" + type.name());
+        return specific != null && !specific.isBlank() ? specific : GLOBAL_FROM_NAME;
     }
 
     // ── Templates ─────────────────────────────────────────────────────────────
@@ -58,7 +73,7 @@ public class EmailTemplateRenderer {
             """;
         return new RenderedEmail(
             "Bienvenido/a a la Plataforma de Aprendizaje — PUJ",
-            interpolate(html, e.getTemplateParams()));
+            interpolate(html, e.getTemplateParams()), null, null);
     }
 
     private RenderedEmail renderEnrollmentConfirmed(EmailNotificationEvent e) {
@@ -84,7 +99,7 @@ public class EmailTemplateRenderer {
             """;
         return new RenderedEmail(
             "Inscripción confirmada: " + e.getTemplateParams().getOrDefault("courseTitle", ""),
-            interpolate(html, e.getTemplateParams()));
+            interpolate(html, e.getTemplateParams()), null, null);
     }
 
     private RenderedEmail renderAssessmentGraded(EmailNotificationEvent e) {
@@ -128,7 +143,7 @@ public class EmailTemplateRenderer {
 
         return new RenderedEmail(
             "Resultado de tu evaluación: " + params.getOrDefault("assessmentTitle", ""),
-            interpolate(html, enriched));
+            interpolate(html, enriched), null, null);
     }
 
     private RenderedEmail renderCourseCompleted(EmailNotificationEvent e) {
@@ -152,7 +167,7 @@ public class EmailTemplateRenderer {
             """;
         return new RenderedEmail(
             "¡Completaste el curso: " + e.getTemplateParams().getOrDefault("courseTitle", "") + "!",
-            interpolate(html, e.getTemplateParams()));
+            interpolate(html, e.getTemplateParams()), null, null);
     }
 
     private RenderedEmail renderPasswordReset(EmailNotificationEvent e) {
@@ -182,7 +197,7 @@ public class EmailTemplateRenderer {
             """;
         return new RenderedEmail(
             "Restablecimiento de contraseña — PUJ",
-            interpolate(html, e.getTemplateParams()));
+            interpolate(html, e.getTemplateParams()), null, null);
     }
 
     // ── Interpolación de {{key}} ───────────────────────────────────────────────

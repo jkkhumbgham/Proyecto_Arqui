@@ -5,8 +5,7 @@ import com.puj.collaboration.dto.ThreadRequest;
 import com.puj.collaboration.entity.*;
 import com.puj.collaboration.entity.Thread;
 import com.puj.collaboration.repository.ForumRepository;
-import com.puj.events.ForumPostCreatedEvent;
-import com.puj.events.publisher.EventPublisher;
+
 import com.puj.security.rbac.AuthenticatedUser;
 import com.puj.security.rbac.RequiresRole;
 import com.puj.security.rbac.Role;
@@ -32,7 +31,6 @@ import java.util.stream.Collectors;
 public class ForumResource {
 
     @Inject private ForumRepository   forumRepo;
-    @Inject private EventPublisher    eventPublisher;
     @Inject private AuthenticatedUser authenticatedUser;
 
     @GET
@@ -131,10 +129,6 @@ public class ForumResource {
         firstPost.setContent(req.content());
         forumRepo.savePost(firstPost);
 
-        eventPublisher.publishAnalytics(new ForumPostCreatedEvent(
-                thread.getAuthorId().toString(), forumId.toString(),
-                forum.getCourseId() != null ? forum.getCourseId().toString() : "", true));
-
         return Response.status(Response.Status.CREATED)
                 .entity(Map.of("id", thread.getId().toString(), "title", thread.getTitle()))
                 .build();
@@ -159,10 +153,6 @@ public class ForumResource {
         post.setAuthorId(UUID.fromString(authenticatedUser.getUserId()));
         post.setContent(req.content());
         forumRepo.savePost(post);
-
-        eventPublisher.publishAnalytics(new ForumPostCreatedEvent(
-                post.getAuthorId().toString(), threadId.toString(),
-                thread.getForum().getCourseId() != null ? thread.getForum().getCourseId().toString() : "", false));
 
         return Response.status(Response.Status.CREATED)
                 .entity(Map.of("id", post.getId().toString()))

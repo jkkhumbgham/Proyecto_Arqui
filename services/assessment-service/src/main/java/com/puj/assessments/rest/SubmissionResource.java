@@ -75,6 +75,7 @@ public class SubmissionResource {
     @GET
     @Path("/my")
     @RequiresRole(Role.STUDENT)
+    @Transactional
     @Operation(summary = "Historial de submissions del estudiante (STUDENT)")
     public Response mySubmissions(@QueryParam("page") @DefaultValue("0") int page,
                                   @QueryParam("size") @DefaultValue("50") int size) {
@@ -104,6 +105,7 @@ public class SubmissionResource {
     @GET
     @Path("/avg-for-assessments")
     @RequiresRole({Role.STUDENT, Role.INSTRUCTOR, Role.ADMIN})
+    @Transactional
     @Operation(summary = "Avg score para un conjunto de assessments (módulo locking)")
     public Response avgForAssessments(@QueryParam("userId")        String userIdStr,
                                       @QueryParam("assessmentIds") String assessmentIdsStr) {
