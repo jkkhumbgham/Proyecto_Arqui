@@ -37,6 +37,9 @@ public class AnalyticsDbContext(DbContextOptions<AnalyticsDbContext> options)
             e.Property(x => x.Id).HasColumnName("id");
             e.Property(x => x.UserId).HasColumnName("user_id");
             e.Property(x => x.StudentName).HasColumnName("student_name").HasMaxLength(200);
+            e.Property(x => x.Email).HasColumnName("email").HasMaxLength(200);
+            e.Property(x => x.Role).HasColumnName("role").HasMaxLength(50);
+            e.Property(x => x.LastLoginAt).HasColumnName("last_login_at");
             e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             e.HasIndex(x => x.UserId).IsUnique();
         });

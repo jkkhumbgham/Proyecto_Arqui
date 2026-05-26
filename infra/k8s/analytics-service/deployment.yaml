@@ -4,7 +4,7 @@ metadata:
   name: analytics-service
   namespace: puj-platform
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: analytics-service
@@ -27,7 +27,8 @@ spec:
               valueFrom:
                 secretKeyRef: { name: platform-secrets, key: DB_PASSWORD }
             - name: ConnectionStrings__DefaultConnection
-              value: "Host=postgres;Port=6432;Database=learning_platform;Username=$(DB_USER);Password=$(DB_PASSWORD);SearchPath=analytics"
+              # analytics_db es exclusiva de este servicio → puerto 5432 directo (sin pgbouncer)
+              value: "Host=postgres;Port=5432;Database=analytics_db;Username=$(DB_USER);Password=$(DB_PASSWORD)"
             - name: RabbitMQ__Host
               value: "rabbitmq"
             - name: RabbitMQ__Port

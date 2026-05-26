@@ -190,16 +190,20 @@ public class DashboardBean {
 
     private void loadInactiveUsers() {
         try {
-            HttpRequest req = bearer(USER_URL + "/api/v1/users?inactive=true&days=30&size=50");
+            // Datos vienen de analytics-service (alimentado por eventos RabbitMQ),
+            // no de user-service directamente.
+            HttpRequest req = bearer(ANALYTICS_URL + "/api/v1/analytics/dashboard/inactive-users?days=30&size=50");
             HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() == 200) {
-                JsonNode root = mapper.readTree(resp.body());
-                JsonNode arr  = root.isArray() ? root : root.path("data");
+                JsonNode arr = mapper.readTree(resp.body());
                 arr.forEach(n -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("email",       n.path("email").asText());
-                    m.put("firstName",   n.path("firstName").asText());
-                    m.put("lastName",    n.path("lastName").asText());
+                    // studentName puede ser "FirstName LastName" o solo nombre
+                    String fullName = n.path("studentName").asText("");
+                    String[] parts  = fullName.split(" ", 2);
+                    m.put("firstName",   parts.length > 0 ? parts[0] : "");
+                    m.put("lastName",    parts.length > 1 ? parts[1] : "");
                     m.put("role",        n.path("role").asText());
                     m.put("lastLoginAt", n.path("lastLoginAt").asText("Nunca"));
                     inactiveUsers.add(m);
@@ -405,6 +409,13 @@ public class DashboardBean {
     // Aggregate stats for instructor dashboard
     public long getTotalInstructorStudents() {
         return uniqueInstructorStudents;
+    }
+
+    /** Cursos del instructor con status PUBLISHED (los que realmente están activos). */
+    public long getActiveInstructorCourseCount() {
+        return instructorCourses.stream()
+                .filter(c -> "PUBLISHED".equals(c.getStatus()))
+                .count();
     }
     public double getAvgInstructorGrade() {
         return instructorMetrics.isEmpty() ? 0 :

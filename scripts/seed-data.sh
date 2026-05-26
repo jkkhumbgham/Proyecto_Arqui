@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # Pobla la plataforma con datos de demostración.
-# Uso: bash scripts/seed-data.sh
+# Uso:
+#   Docker Compose : bash scripts/seed-data.sh
+#   Kubernetes     : bash scripts/seed-data.sh --k8s
+#
+# Con --k8s necesitas port-forwards activos en otra terminal:
+#   kubectl port-forward svc/user-service          8081:8080 -n puj-platform &
+#   kubectl port-forward svc/course-service        8082:8080 -n puj-platform &
+#   kubectl port-forward svc/assessment-service    8083:8080 -n puj-platform &
+#   kubectl port-forward svc/collaboration-service 8084:8080 -n puj-platform &
+#   kubectl port-forward svc/analytics-service     8085:8080 -n puj-platform &
 
 set -euo pipefail
 
@@ -8,14 +17,46 @@ USER_SVC="http://localhost:8081/api/v1"
 COURSE_SVC="http://localhost:8082/api/v1"
 ASSESS_SVC="http://localhost:8083/api/v1"
 COLLAB_SVC="http://localhost:8084/api/v1"
+ANALYTICS_SVC="http://localhost:8085"
 
-PSQL="docker exec -i puj-postgres psql -U puj_admin -d learning_platform"
+if [[ "${1:-}" == "--k8s" ]]; then
+  PSQL="kubectl exec -n puj-platform deploy/postgres -c postgres -- psql -U puj_admin -d learning_platform"
+else
+  PSQL="docker exec -i puj-postgres psql -U puj_admin -d learning_platform"
+fi
 
 ok()  { echo "[OK]  $*"; }
 info(){ echo "[..] $*"; }
 fail(){ echo "[ERR] $*" >&2; exit 1; }
 
-# ─── 1. Promover admin a rol ADMIN ────────────────────────────────────────────
+# ─── 0. Esperar a que analytics-service esté listo ───────────────────────────
+# analytics-service usa WaitUntilStarted=true en MassTransit: su /health solo
+# responde cuando el consumer de RabbitMQ ya está conectado. Esperarlo AQUÍ
+# garantiza que cada evento publicado durante el seed (USER_REGISTERED,
+# COURSE_ENROLLED…) llegue al consumer desde el primer momento, sin SQL fallback.
+info "Esperando analytics-service (MassTransit debe estar conectado)..."
+READY=false
+for i in $(seq 1 40); do
+  if curl -sf "$ANALYTICS_SVC/health" > /dev/null 2>&1; then
+    ok "analytics-service listo (intento $i)"
+    READY=true
+    break
+  fi
+  info "  analytics no responde aún (intento $i/40) — esperando 5 s..."
+  sleep 5
+done
+
+if ! $READY; then
+  fail "analytics-service no respondió tras 200 s. Verifica que el pod esté corriendo y el port-forward activo (8085)."
+fi
+
+# ─── 1. Registrar y promover admin ───────────────────────────────────────────
+info "Registrando admin@puj.edu.co..."
+curl -s -X POST "$USER_SVC/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@puj.edu.co","password":"Admin1234!","firstName":"Admin","lastName":"PUJ","consentGiven":true}' \
+  > /dev/null && ok "admin@puj.edu.co registrado" || info "admin ya existía"
+
 info "Promoviendo admin@puj.edu.co → ADMIN"
 $PSQL -c "UPDATE users.users SET role='ADMIN' WHERE email='admin@puj.edu.co';" > /dev/null
 ok "admin@puj.edu.co es ADMIN"
@@ -38,8 +79,7 @@ curl -sf -X POST "$USER_SVC/auth/register" \
   -d '{"email":"prof.garcia@puj.edu.co","password":"Profesor1234!","firstName":"Carlos","lastName":"García","consentGiven":true}' \
   > /dev/null && ok "prof.garcia@puj.edu.co registrado" || info "prof.garcia ya existía"
 
-INSTR_ID=$(docker exec -i puj-postgres psql -U puj_admin -d learning_platform -t -A \
-  -c "SELECT id FROM users.users WHERE email='prof.garcia@puj.edu.co';")
+INSTR_ID=$($PSQL -t -A -c "SELECT id FROM users.users WHERE email='prof.garcia@puj.edu.co';")
 
 info "Promoviendo prof.garcia → INSTRUCTOR"
 $PSQL -c "UPDATE users.users SET role='INSTRUCTOR' WHERE email='prof.garcia@puj.edu.co';" > /dev/null
@@ -415,6 +455,32 @@ GID3=$(create_group "Equipo Arquitectura" "$CID2" 6 "$T_SOFIA")
 
 ok "Grupos de estudio creados"
 
+# ─── 12. Módulos y lecciones detallados (Python) ─────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+info "Cargando módulos y lecciones de cursos..."
+python3 "$SCRIPT_DIR/seed_courses.py" || info "⚠ seed_courses.py falló — continúa"
+
+info "Cargando contenido extra..."
+python3 "$SCRIPT_DIR/seed_extra_content.py" || info "⚠ seed_extra_content.py falló — continúa"
+
+# ─── 13. Verificar que analytics procesó los eventos vía RabbitMQ ─────────────
+# No hay SQL fallback: los datos deben llegar por la cola (el paso 0 garantizó
+# que analytics-service ya estaba conectado antes de publicar el primer evento).
+info "Verificando datos en analytics (via RabbitMQ)..."
+ANLYT=$(curl -sf -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "$ANALYTICS_SVC/api/v1/analytics/dashboard/summary" 2>/dev/null || echo "{}")
+ANLYT_USERS=$(echo "$ANLYT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('totalUsers',0))" 2>/dev/null || echo "0")
+ANLYT_ENR=$(echo   "$ANLYT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('totalEnrollments',0))" 2>/dev/null || echo "0")
+ANLYT_CRS=$(echo   "$ANLYT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('totalCourses',0))" 2>/dev/null || echo "0")
+
+ok "Analytics vía RabbitMQ → usuarios: $ANLYT_USERS · inscripciones: $ANLYT_ENR · cursos: $ANLYT_CRS"
+
+if [ "$ANLYT_USERS" -lt 7 ] 2>/dev/null; then
+  info "  ⚠ Se esperaban ≥7 usuarios. Verifica los logs de analytics-service:"
+  info "     kubectl logs deploy/analytics-service -n puj-platform --tail=50"
+fi
+
 # ─── Resumen ──────────────────────────────────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════════════════════"
@@ -429,10 +495,10 @@ echo "   sofia.ruiz@puj.edu.co     Estudiante1!  (STUDENT)"
 echo "   andres.mora@puj.edu.co    Estudiante1!  (STUDENT)"
 echo "   valentina.gil@puj.edu.co  Estudiante1!  (STUDENT)"
 echo ""
-echo " Cursos (5 publicados con inscripciones)"
+echo " Cursos con módulos y lecciones"
 echo " Evaluaciones (4 quizzes con preguntas y opciones)"
 echo " Foros (3) con hilos y respuestas"
 echo " Grupos de estudio (3) con miembros"
 echo "═══════════════════════════════════════════════════════"
-echo " Web UI: http://localhost:8080"
+echo " Web UI: http://platform.local"
 echo "═══════════════════════════════════════════════════════"

@@ -24,6 +24,7 @@ public class EventPublisher {
         "COURSE_ENROLLED",      "CourseEnrolledMessage",
         "ASSESSMENT_SUBMITTED", "AssessmentSubmittedMessage",
         "USER_REGISTERED",      "UserRegisteredMessage",
+        "USER_LOGGED_IN",       "UserLoggedInMessage",
         "LESSON_COMPLETED",     "LessonCompletedMessage"
     );
 

@@ -27,7 +27,24 @@ data:
     load_definitions = /etc/rabbitmq/definitions.json
   definitions.json: |
     {
+      "users": [
+        {
+          "name": "puj_rabbit",
+          "password_hash": "U2FsdGSK8DvnjYp8WneL8wC8NNt2A2mAeiq2oo3FUaP+OG+j",
+          "hashing_algorithm": "rabbit_password_hashing_sha256",
+          "tags": "administrator"
+        }
+      ],
       "vhosts": [{ "name": "puj_vhost" }],
+      "permissions": [
+        {
+          "user": "puj_rabbit",
+          "vhost": "puj_vhost",
+          "configure": ".*",
+          "write": ".*",
+          "read": ".*"
+        }
+      ],
       "exchanges": [
         { "name": "platform.events", "vhost": "puj_vhost", "type": "topic", "durable": true },
         { "name": "platform.dlx",    "vhost": "puj_vhost", "type": "fanout","durable": true }

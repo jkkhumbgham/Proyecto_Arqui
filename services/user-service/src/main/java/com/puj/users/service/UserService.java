@@ -1,5 +1,8 @@
 package com.puj.users.service;
 
+import com.puj.events.EmailNotificationEvent;
+import com.puj.events.UserRegisteredEvent;
+import com.puj.events.publisher.EventPublisher;
 import com.puj.security.rbac.Role;
 import com.puj.users.dto.AdminCreateUserRequest;
 import com.puj.users.dto.UpdateUserRequest;
@@ -17,13 +20,15 @@ import org.mindrot.jbcrypt.BCrypt;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @ApplicationScoped
 public class UserService {
 
-    @Inject private UserRepository    userRepo;
+    @Inject private UserRepository     userRepo;
     @Inject private AuditLogRepository auditRepo;
+    @Inject private EventPublisher     eventPublisher;
 
     public UserResponse findById(UUID id) {
         return userRepo.findById(id)
@@ -96,8 +101,21 @@ public class UserService {
         user.setConsentGiven(req.consentGiven());
         if (req.consentGiven()) user.setConsentDate(Instant.now());
         userRepo.save(user);
-
         auditRepo.save(AuditLog.of(adminId, "ADMIN_CREATE_USER", "/api/v1/users", ip));
+
+        // Publicar evento para que analytics cuente al nuevo usuario
+        eventPublisher.publishAnalytics(new UserRegisteredEvent(
+                user.getId().toString(), user.getEmail(),
+                user.getFirstName(), user.getLastName(),
+                user.getRole().name()
+        ));
+        // Notificar al nuevo usuario por correo (misma plantilla que auto-registro)
+        eventPublisher.publishEmail(new EmailNotificationEvent(
+                user.getEmail(), user.getFirstName(),
+                EmailNotificationEvent.EmailType.WELCOME,
+                Map.of("firstName", user.getFirstName())
+        ));
+
         return UserResponse.from(user);
     }
 

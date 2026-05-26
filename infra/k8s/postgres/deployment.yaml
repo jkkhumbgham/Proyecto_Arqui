@@ -15,32 +15,36 @@ spec:
     spec:
       containers:
         - name: pgbouncer
-          image: bitnami/pgbouncer:1.22.1
+          image: edoburu/pgbouncer:latest
           ports:
             - containerPort: 6432
           env:
-            - name: POSTGRESQL_HOST
+            - name: DB_HOST
               value: "127.0.0.1"
-            - name: POSTGRESQL_PORT
+            - name: DB_PORT
               value: "5432"
-            - name: POSTGRESQL_DATABASE
+            - name: DB_NAME
               value: "learning_platform"
-            - name: POSTGRESQL_USERNAME
+            - name: DB_USER
               valueFrom:
                 secretKeyRef: { name: platform-secrets, key: DB_USER }
-            - name: POSTGRESQL_PASSWORD
+            - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef: { name: platform-secrets, key: DB_PASSWORD }
-            - name: PGBOUNCER_POOL_MODE
+            - name: POOL_MODE
               value: "transaction"
-            - name: PGBOUNCER_MAX_CLIENT_CONN
+            - name: MAX_CLIENT_CONN
               value: "200"
-            - name: PGBOUNCER_DEFAULT_POOL_SIZE
+            - name: DEFAULT_POOL_SIZE
               value: "20"
+            - name: LISTEN_PORT
+              value: "6432"
+            - name: IGNORE_STARTUP_PARAMETERS
+              value: "extra_float_digits,search_path"
           readinessProbe:
-            exec:
-              command: ["pg_isready", "-h", "127.0.0.1", "-p", "6432"]
-            initialDelaySeconds: 5
+            tcpSocket:
+              port: 6432
+            initialDelaySeconds: 10
             periodSeconds: 5
           resources:
             requests: { memory: "64Mi", cpu: "50m" }
@@ -63,6 +67,10 @@ spec:
                   key: DB_PASSWORD
             - name: POSTGRES_DB
               value: learning_platform
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: "md5"
+            - name: POSTGRES_INITDB_ARGS
+              value: "--auth-host=md5"
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data

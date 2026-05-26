@@ -27,6 +27,8 @@ public class UserRegisteredConsumer(AnalyticsDbContext db, ILogger<UserRegistere
             db.StudentNameCaches.Add(cache);
         }
         cache.StudentName = $"{msg.FirstName} {msg.LastName}".Trim();
+        cache.Email       = msg.Email ?? string.Empty;
+        cache.Role        = msg.Role  ?? string.Empty;
         cache.UpdatedAt   = DateTime.UtcNow;
 
         await db.SaveChangesAsync();

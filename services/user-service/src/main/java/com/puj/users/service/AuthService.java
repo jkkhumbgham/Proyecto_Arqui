@@ -1,6 +1,7 @@
 package com.puj.users.service;
 
 import com.puj.events.EmailNotificationEvent;
+import com.puj.events.UserLoggedInEvent;
 import com.puj.events.UserRegisteredEvent;
 import com.puj.events.publisher.EventPublisher;
 import com.puj.security.blacklist.TokenBlacklistService;
@@ -104,6 +105,10 @@ public class AuthService {
         refreshRepo.save(refresh);
 
         userRepo.save(user);
+
+        // Notifica a analytics que el usuario inició sesión (para calcular usuarios inactivos)
+        eventPublisher.publishAnalytics(new UserLoggedInEvent(
+                user.getId().toString(), user.getEmail(), user.getRole().name()));
 
         String refreshTokenValue = refresh.getId() + ":" + rawRefresh;
 

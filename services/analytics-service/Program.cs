@@ -47,6 +47,7 @@ builder.Services.AddMassTransit(x => {
     x.AddConsumer<AssessmentSubmittedConsumer>();
     x.AddConsumer<CourseEnrolledConsumer>();
     x.AddConsumer<UserRegisteredConsumer>();
+    x.AddConsumer<UserLoggedInConsumer>();
     x.AddConsumer<LessonCompletedConsumer>();
 
     x.UsingRabbitMq((ctx, cfg) => {
@@ -59,18 +60,28 @@ builder.Services.AddMassTransit(x => {
                 h.Password(builder.Configuration["RabbitMQ:Password"] ?? "guest");
             });
 
+        // Un único endpoint — todos los mensajes del exchange platform.events
+        // con routing key analytics.# llegan aquí. NO llamar ConfigureEndpoints:
+        // ese método crea colas adicionales con nombres automáticos que no reciben nada.
         cfg.ReceiveEndpoint("analytics.results", e => {
             e.SetQueueArgument("x-message-ttl", 86400000L);
             e.SetQueueArgument("x-dead-letter-exchange", "platform.dlx");
             e.ConfigureConsumer<AssessmentSubmittedConsumer>(ctx);
             e.ConfigureConsumer<CourseEnrolledConsumer>(ctx);
             e.ConfigureConsumer<UserRegisteredConsumer>(ctx);
+            e.ConfigureConsumer<UserLoggedInConsumer>(ctx);
             e.ConfigureConsumer<LessonCompletedConsumer>(ctx);
             e.UseMessageRetry(r => r.Intervals(500, 1000, 2000));
         });
-
-        cfg.ConfigureEndpoints(ctx);
     });
+});
+
+// Esperar hasta 5 min a que RabbitMQ esté listo (K8s: race condition en arranque).
+// Si falla dentro de StartTimeout, el pod falla y K8s lo reinicia — ciclo seguro.
+builder.Services.Configure<MassTransitHostOptions>(options => {
+    options.WaitUntilStarted = true;
+    options.StartTimeout    = TimeSpan.FromSeconds(300); // 5 minutos
+    options.StopTimeout     = TimeSpan.FromSeconds(30);
 });
 
 // ─── Swagger / OpenAPI ─────────────────────────────────────────────────────────
@@ -92,6 +103,15 @@ using (var scope = app.Services.CreateScope()) {
     try {
         db.Database.EnsureCreated();
         log.LogInformation("Analytics schema ready.");
+
+        // Migración idempotente: añade columnas nuevas si no existen.
+        // EnsureCreated() crea las tablas la primera vez pero no altera las existentes.
+        db.Database.ExecuteSqlRaw(@"
+            ALTER TABLE analytics.student_name_cache
+                ADD COLUMN IF NOT EXISTS email       VARCHAR(200) NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS role        VARCHAR(50)  NOT NULL DEFAULT '',
+                ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+        ");
 
         if (!db.PlatformStats.Any()) {
             db.PlatformStats.Add(new Puj.Analytics.Models.PlatformStats());

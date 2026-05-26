@@ -44,11 +44,11 @@ spec:
               mountPath: /etc/rabbitmq/rabbitmq.conf
               subPath: rabbitmq.conf
           readinessProbe:
-            exec:
-              command: ["rabbitmq-diagnostics", "check_port_connectivity"]
-            initialDelaySeconds: 20
+            tcpSocket:
+              port: 5672
+            initialDelaySeconds: 30
             periodSeconds: 10
-            failureThreshold: 5
+            failureThreshold: 10
           resources:
             requests:
               memory: "256Mi"

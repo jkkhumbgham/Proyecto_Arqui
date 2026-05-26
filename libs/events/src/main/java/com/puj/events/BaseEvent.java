@@ -9,6 +9,7 @@ import java.util.UUID;
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "eventType")
 @JsonSubTypes({
         @JsonSubTypes.Type(value = UserRegisteredEvent.class,         name = "USER_REGISTERED"),
+        @JsonSubTypes.Type(value = UserLoggedInEvent.class,           name = "USER_LOGGED_IN"),
         @JsonSubTypes.Type(value = CourseEnrolledEvent.class,         name = "COURSE_ENROLLED"),
         @JsonSubTypes.Type(value = AssessmentSubmittedEvent.class,    name = "ASSESSMENT_SUBMITTED"),
         @JsonSubTypes.Type(value = EmailNotificationEvent.class,      name = "EMAIL_NOTIFICATION"),
