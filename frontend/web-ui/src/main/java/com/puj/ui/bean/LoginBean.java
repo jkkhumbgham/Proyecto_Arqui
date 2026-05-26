@@ -17,7 +17,7 @@ import java.time.Duration;
 @RequestScoped
 public class LoginBean {
 
-    private static final String USER_SERVICE_URL =
+    private static final String USER_URL =
             System.getenv().getOrDefault("USER_SERVICE_URL", "http://user-service:8080");
 
     @Inject private SessionBean session;
@@ -37,7 +37,7 @@ public class LoginBean {
         try {
             String body = String.format("{\"email\":\"%s\",\"password\":\"%s\"}", email, password);
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(USER_SERVICE_URL + "/api/v1/auth/login"))
+                    .uri(URI.create(USER_URL + "/api/v1/auth/login"))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .timeout(Duration.ofSeconds(5))
@@ -79,7 +79,7 @@ public class LoginBean {
                     lastName   != null ? lastName   : "",
                     consentGiven);
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(USER_SERVICE_URL + "/api/v1/auth/register"))
+                    .uri(URI.create(USER_URL + "/api/v1/auth/register"))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .timeout(Duration.ofSeconds(5))

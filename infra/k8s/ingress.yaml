@@ -5,17 +5,23 @@ metadata:
   namespace: puj-platform
   annotations:
     kubernetes.io/ingress.class: "nginx"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
     # Rate limiting — escenario E-09: 100 req/min por IP
     nginx.ingress.kubernetes.io/limit-rpm: "100"
     nginx.ingress.kubernetes.io/limit-connections: "20"
+    # Sticky sessions — requerido porque SessionBean es @SessionScoped (JWT en servidor)
+    # El Ingress Controller emite cookie PUJROUTE en el primer request;
+    # requests subsiguientes del mismo browser siempre van al mismo pod de web-ui.
+    # Si el pod muere, el Ingress redirige a uno sano y emite nueva cookie.
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "PUJROUTE"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/"
+    nginx.ingress.kubernetes.io/session-cookie-samesite: "Lax"
 spec:
-  tls:
-    - hosts:
-        - platform.puj.edu.co
-      secretName: platform-tls
   rules:
     - host: platform.puj.edu.co
       http:

@@ -7,7 +7,7 @@ kind: Kustomization
 # Flujo completo: ver manual.md §7
 
 resources:
-  - ../../
+  - ../../k8s/
   - mailhog.yaml
 
 # ── Cambia TU_USUARIO por tu nombre de usuario de GitHub ─────────────────────

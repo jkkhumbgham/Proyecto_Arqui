@@ -29,12 +29,12 @@ public class StudyGroupBean implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private static final String COLLAB_URL =
-            System.getenv().getOrDefault("COLLABORATION_SERVICE_URL", "http://collaboration-service:8080");
-    private static final String COURSE_URL =
-            System.getenv().getOrDefault("COURSE_SERVICE_URL", "http://course-service:8080");
     private static final String USER_URL =
             System.getenv().getOrDefault("USER_SERVICE_URL", "http://user-service:8080");
+    private static final String COURSE_URL =
+            System.getenv().getOrDefault("COURSE_SERVICE_URL", "http://course-service:8080");
+    private static final String COLLAB_URL =
+            System.getenv().getOrDefault("COLLABORATION_SERVICE_URL", "http://collaboration-service:8080");
 
     private static final DateTimeFormatter DATE_FMT =
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.systemDefault());

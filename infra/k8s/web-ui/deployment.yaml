@@ -22,10 +22,12 @@ spec:
     spec:
       containers:
         - name: web-ui
-          image: REGISTRY/puj/web-ui:latest
+          image: puj/web-ui:local
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
           env:
+            # URLs directas a cada servicio — K8s ClusterIP Services hacen el load balancing
             - name: USER_SERVICE_URL
               value: "http://user-service:8080"
             - name: COURSE_SERVICE_URL
@@ -36,6 +38,8 @@ spec:
               value: "http://collaboration-service:8080"
             - name: ANALYTICS_SERVICE_URL
               value: "http://analytics-service:8080"
+            - name: EMAIL_SERVICE_URL
+              value: "http://email-service:8080"
           readinessProbe:
             httpGet:
               path: /
@@ -69,10 +73,8 @@ spec:
     - port: 8080
       targetPort: 8080
   type: ClusterIP
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 3600
+  # Sticky sessions manejadas por el Nginx Ingress Controller (cookie PUJROUTE en ingress.yaml)
+  # No se usa sessionAffinity a nivel de Service para no interferir con el Ingress
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

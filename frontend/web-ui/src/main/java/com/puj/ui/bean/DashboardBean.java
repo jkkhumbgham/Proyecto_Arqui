@@ -20,14 +20,14 @@ import java.util.*;
 @RequestScoped
 public class DashboardBean {
 
-    private static final String ANALYTICS_URL =
-            System.getenv().getOrDefault("ANALYTICS_SERVICE_URL", "http://analytics-service:8080");
+    private static final String USER_URL =
+            System.getenv().getOrDefault("USER_SERVICE_URL", "http://user-service:8080");
     private static final String COURSE_URL =
             System.getenv().getOrDefault("COURSE_SERVICE_URL", "http://course-service:8080");
     private static final String ASSESSMENT_URL =
             System.getenv().getOrDefault("ASSESSMENT_SERVICE_URL", "http://assessment-service:8080");
-    private static final String USER_URL =
-            System.getenv().getOrDefault("USER_SERVICE_URL", "http://user-service:8080");
+    private static final String ANALYTICS_URL =
+            System.getenv().getOrDefault("ANALYTICS_SERVICE_URL", "http://analytics-service:8080");
 
     @Inject private SessionBean session;
 

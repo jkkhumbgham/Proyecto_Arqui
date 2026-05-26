@@ -89,7 +89,7 @@ kubectl create secret generic platform-secrets \
 
 # ── 5. Aplicar overlay local ──────────────────────────────────────────────────
 echo "Aplicando manifiestos (overlay minikube)..."
-kubectl apply -k "$ROOT/infra/k8s/overlays/local/"
+kubectl apply -k "$ROOT/infra/overlays/local/"
 
 # ── 6. Esperar a que los pods arranquen ───────────────────────────────────────
 echo ""

@@ -15,7 +15,8 @@ spec:
     spec:
       containers:
         - name: analytics-service
-          image: REGISTRY/puj/analytics-service:latest
+          image: puj/analytics-service:local
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
           env:
@@ -64,23 +65,3 @@ spec:
     - port: 8080
       targetPort: 8080
   type: ClusterIP
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: analytics-service-hpa
-  namespace: puj-platform
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: analytics-service
-  minReplicas: 2
-  maxReplicas: 4
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70

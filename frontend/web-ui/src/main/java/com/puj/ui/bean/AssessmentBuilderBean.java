@@ -27,10 +27,10 @@ import java.util.Map;
 @SessionScoped
 public class AssessmentBuilderBean implements Serializable {
 
-    private static final String ASSESSMENT_URL =
-            System.getenv().getOrDefault("ASSESSMENT_SERVICE_URL", "http://assessment-service:8080");
     private static final String COURSE_URL =
             System.getenv().getOrDefault("COURSE_SERVICE_URL", "http://course-service:8080");
+    private static final String ASSESSMENT_URL =
+            System.getenv().getOrDefault("ASSESSMENT_SERVICE_URL", "http://assessment-service:8080");
 
     @Inject private SessionBean session;
 

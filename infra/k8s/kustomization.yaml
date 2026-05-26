@@ -4,7 +4,9 @@ kind: Kustomization
 resources:
   # Cluster-wide resources first
   - namespace.yaml
-  - secrets.yaml
+  # secrets.yaml excluido — el secreto se crea antes de aplicar kustomize
+  # (local: bash scripts/local-k8s.sh lo crea con kubectl create secret --dry-run | apply)
+  # (producción: el pipeline CI/CD lo crea con valores de AWS Secrets Manager / Vault)
   - configmaps.yaml
   # Infrastructure
   - postgres/deployment.yaml
@@ -12,10 +14,15 @@ resources:
   - rabbitmq/deployment.yaml
   # Business services
   - user-service/deployment.yaml
+  - user-service/hpa.yaml
   - course-service/deployment.yaml
+  - course-service/hpa.yaml
   - assessment-service/deployment.yaml
+  - assessment-service/hpa.yaml
   - collaboration-service/deployment.yaml
+  - collaboration-service/hpa.yaml
   - analytics-service/deployment.yaml
+  - analytics-service/hpa.yaml
   - email-service/deployment.yaml
   # Frontend
   - web-ui/deployment.yaml

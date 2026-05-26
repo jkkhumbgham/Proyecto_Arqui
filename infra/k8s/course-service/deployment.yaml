@@ -22,7 +22,8 @@ spec:
     spec:
       containers:
         - name: course-service
-          image: REGISTRY/puj/course-service:latest
+          image: puj/course-service:local
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
           env:
@@ -103,29 +104,3 @@ spec:
     - port: 8080
       targetPort: 8080
   type: ClusterIP
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: course-service-hpa
-  namespace: puj-platform
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: course-service
-  minReplicas: 2
-  maxReplicas: 6
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80

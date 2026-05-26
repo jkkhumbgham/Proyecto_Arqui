@@ -22,7 +22,8 @@ spec:
     spec:
       containers:
         - name: assessment-service
-          image: REGISTRY/puj/assessment-service:latest
+          image: puj/assessment-service:local
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
           env:
@@ -95,29 +96,3 @@ spec:
     - port: 8080
       targetPort: 8080
   type: ClusterIP
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: assessment-service-hpa
-  namespace: puj-platform
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: assessment-service
-  minReplicas: 2
-  maxReplicas: 8          # Más réplicas: evaluaciones son CPU-intensivas (auto-calificación)
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 65   # umbral más bajo por la carga de calificación
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80

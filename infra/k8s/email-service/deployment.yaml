@@ -22,7 +22,8 @@ spec:
     spec:
       containers:
         - name: email-service
-          image: REGISTRY/puj/email-service:latest
+          image: puj/email-service:local
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
           env:

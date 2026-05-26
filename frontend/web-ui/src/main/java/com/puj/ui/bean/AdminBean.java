@@ -25,17 +25,17 @@ public class AdminBean implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private static final String USER_URL =
-            System.getenv().getOrDefault("USER_SERVICE_URL",          "http://user-service:8080");
+            System.getenv().getOrDefault("USER_SERVICE_URL", "http://user-service:8080");
     private static final String COURSE_URL =
-            System.getenv().getOrDefault("COURSE_SERVICE_URL",        "http://course-service:8080");
+            System.getenv().getOrDefault("COURSE_SERVICE_URL", "http://course-service:8080");
     private static final String ASSESSMENT_URL =
-            System.getenv().getOrDefault("ASSESSMENT_SERVICE_URL",    "http://assessment-service:8080");
-    private static final String COLLABORATION_URL =
+            System.getenv().getOrDefault("ASSESSMENT_SERVICE_URL", "http://assessment-service:8080");
+    private static final String COLLAB_URL =
             System.getenv().getOrDefault("COLLABORATION_SERVICE_URL", "http://collaboration-service:8080");
     private static final String ANALYTICS_URL =
-            System.getenv().getOrDefault("ANALYTICS_SERVICE_URL",     "http://analytics-service:8080");
+            System.getenv().getOrDefault("ANALYTICS_SERVICE_URL", "http://analytics-service:8080");
     private static final String EMAIL_URL =
-            System.getenv().getOrDefault("EMAIL_SERVICE_URL",         "http://email-service:8080");
+            System.getenv().getOrDefault("EMAIL_SERVICE_URL", "http://email-service:8080");
 
     @Inject private SessionBean session;
 
@@ -139,14 +139,12 @@ public class AdminBean implements Serializable {
 
     private void loadHealthChecks() {
         healthChecks.clear();
-        // Java services use @ApplicationPath("/api/v1"), so health is at /api/v1/health
-        checkHealth("user-service",          USER_URL          + "/api/v1/health");
-        checkHealth("course-service",        COURSE_URL        + "/api/v1/health");
-        checkHealth("assessment-service",    ASSESSMENT_URL    + "/api/v1/health");
-        checkHealth("collaboration-service", COLLABORATION_URL + "/api/v1/health");
-        // .NET and email-service serve health at root path
-        checkHealth("analytics-service",     ANALYTICS_URL     + "/health");
-        checkHealth("email-service",         EMAIL_URL         + "/health");
+        checkHealth("user-service",          USER_URL       + "/api/v1/health");
+        checkHealth("course-service",        COURSE_URL     + "/api/v1/health");
+        checkHealth("assessment-service",    ASSESSMENT_URL + "/api/v1/health");
+        checkHealth("collaboration-service", COLLAB_URL     + "/api/v1/health");
+        checkHealth("analytics-service",     ANALYTICS_URL  + "/health");
+        checkHealth("email-service",         EMAIL_URL      + "/health");
     }
 
     private void checkHealth(String name, String url) {
