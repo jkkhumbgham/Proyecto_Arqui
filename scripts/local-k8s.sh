@@ -68,6 +68,18 @@ docker images --format "  {{.Repository}}:{{.Tag}}" | grep "puj/" || true
 # ── 4. Namespace y secreto con valores locales ─────────────────────────────────
 echo ""
 echo "Creando namespace y secretos..."
+
+# Espera si el namespace sigue en estado Terminating (p.ej. tras un 'kubectl delete namespace')
+NS_STATUS=$(kubectl get namespace puj-platform -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+if [ "$NS_STATUS" = "Terminating" ]; then
+  echo "  ⏳ Namespace puj-platform en estado Terminating — esperando hasta 120 s..."
+  kubectl wait --for=delete namespace/puj-platform --timeout=120s 2>/dev/null \
+    && echo "  ✓ Namespace eliminado, continuando." \
+    || { echo "  ✗ El namespace no terminó en 120 s. Comprueba finalizers con:"; \
+         echo "      kubectl get namespace puj-platform -o json | jq '.spec.finalizers'"; \
+         exit 1; }
+fi
+
 kubectl apply -f "$ROOT/infra/k8s/namespace.yaml"
 
 kubectl create secret generic platform-secrets \
