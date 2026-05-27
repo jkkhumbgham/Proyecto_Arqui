@@ -13,9 +13,15 @@ public class AssessmentSubmittedConsumer(
 {
     public async Task Consume(ConsumeContext<AssessmentSubmittedMessage> context)
     {
-        var msg      = context.Message;
-        var courseId = Guid.Parse(msg.CourseId);
-        logger.LogInformation("Processing ASSESSMENT_SUBMITTED: {SubmissionId}", msg.SubmissionId);
+        var msg = context.Message;
+        logger.LogInformation("Processing ASSESSMENT_SUBMITTED: SubmissionId={SubmissionId} CourseId={CourseId} Score={Score}/{MaxScore} Passed={Passed}",
+            msg.SubmissionId, msg.CourseId, msg.Score, msg.MaxScore, msg.Passed);
+
+        if (string.IsNullOrWhiteSpace(msg.CourseId) || !Guid.TryParse(msg.CourseId, out var courseId))
+        {
+            logger.LogWarning("ASSESSMENT_SUBMITTED descartado — CourseId inválido o nulo: '{CourseId}'", msg.CourseId);
+            return;
+        }
 
         // ── Platform-wide counters ────────────────────────────────────────────
         var stats = await db.PlatformStats.FirstOrDefaultAsync();

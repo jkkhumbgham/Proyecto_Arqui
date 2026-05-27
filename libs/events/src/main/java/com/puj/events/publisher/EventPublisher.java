@@ -62,7 +62,7 @@ public class EventPublisher {
                     body
             );
 
-            LOG.fine("Evento publicado: " + event.getEventType() + " [" + event.getEventId() + "]");
+            LOG.info("Evento publicado: " + event.getEventType() + " [" + event.getEventId() + "]");
 
         } catch (Exception e) {
             LOG.log(Level.WARNING, "Error publicando evento: " + event.getEventType(), e);
@@ -107,10 +107,13 @@ public class EventPublisher {
                     body
             );
 
-            LOG.fine("Evento analytics publicado [MassTransit]: " + event.getEventType() + " [" + event.getEventId() + "]");
+            LOG.info("Evento analytics publicado [MassTransit]: " + event.getEventType()
+                    + " [" + event.getEventId() + "] → analytics." + event.getEventType().toLowerCase());
 
         } catch (Exception e) {
             LOG.log(Level.WARNING, "Error publicando evento analytics: " + event.getEventType(), e);
+            // Intentar reconexión lazy antes del siguiente evento
+            connectionProvider.isAvailable();
         }
     }
 
