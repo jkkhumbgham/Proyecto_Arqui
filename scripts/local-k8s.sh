@@ -214,7 +214,16 @@ wait_http 8083 "/api/v1/health" "assessment-service"
 wait_http 8084 "/api/v1/health" "collaboration-service"
 wait_http 8085 "/health"        "analytics-service (MassTransit)"
 
-bash "$ROOT/scripts/seed-data.sh" --k8s || echo "  ⚠ Seed falló o los datos ya existían — continúa"
+# Solo correr el seed si la base no tiene datos aún (evita doble-seed si el script
+# se corre sin haber borrado el namespace primero).
+COURSE_COUNT=$(kubectl exec -n puj-platform deploy/postgres -c postgres -- \
+  psql -U puj_admin -d learning_platform -tAc \
+  "SELECT COUNT(*) FROM courses.courses;" 2>/dev/null | tr -d '[:space:]' || echo "0")
+if [ "${COURSE_COUNT:-0}" -gt 0 ]; then
+  echo "  ⚠ La BD ya tiene ${COURSE_COUNT} curso(s) — seed omitido (borra el namespace primero para re-seedar)"
+else
+  bash "$ROOT/scripts/seed-data.sh" --k8s || echo "  ⚠ Seed falló — continúa"
+fi
 
 # Cerrar port-forwards del seed
 kill $PF1 $PF2 $PF3 $PF4 $PF5 2>/dev/null || true
