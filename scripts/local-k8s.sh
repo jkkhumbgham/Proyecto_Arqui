@@ -174,6 +174,10 @@ fi
 echo ""
 echo "Cargando datos de demostración..."
 
+# Liberar puertos si hay port-forwards residuales de una sesión anterior
+pkill -f "kubectl port-forward" 2>/dev/null || true
+sleep 2
+
 # Port-forwards temporales para el seed
 kubectl port-forward svc/user-service          8081:8080 -n puj-platform &>/dev/null &
 PF1=$!
