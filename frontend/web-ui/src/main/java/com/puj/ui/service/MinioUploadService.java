@@ -1,6 +1,5 @@
 package com.puj.ui.service;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.servlet.http.Part;
 
@@ -33,14 +32,6 @@ public class MinioUploadService {
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
-
-    private boolean available = false;
-
-    @PostConstruct
-    void init() {
-        available = ACCESS_KEY != null && !ACCESS_KEY.isBlank()
-                 && SECRET_KEY != null && !SECRET_KEY.isBlank();
-    }
 
     public String upload(Part file) throws Exception {
         String submittedName = file.getSubmittedFileName();
@@ -106,7 +97,16 @@ public class MinioUploadService {
         return PUBLIC_URL + "/" + BUCKET + "/" + objectName;
     }
 
-    public boolean isAvailable() { return available; }
+    public boolean isAvailable() {
+        if (ACCESS_KEY == null || ACCESS_KEY.isBlank() || SECRET_KEY == null || SECRET_KEY.isBlank())
+            return false;
+        try {
+            HttpRequest ping = HttpRequest.newBuilder()
+                    .uri(URI.create(ENDPOINT + "/minio/health/live"))
+                    .GET().timeout(Duration.ofSeconds(3)).build();
+            return http.send(ping, HttpResponse.BodyHandlers.discarding()).statusCode() == 200;
+        } catch (Exception e) { return false; }
+    }
 
     // ── SigV4 helpers ────────────────────────────────────────────────────────
 

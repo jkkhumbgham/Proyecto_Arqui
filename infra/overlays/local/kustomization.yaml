@@ -4,6 +4,8 @@ kind: Kustomization
 resources:
   - ../../k8s/
   - mailhog.yaml
+  - minio.yaml
+  - minio-init-job.yaml
 
 # Las imágenes base ya usan puj/<svc>:local + imagePullPolicy: Never
 # No se necesita sustitución de imágenes — las imágenes se construyen en el daemon de minikube

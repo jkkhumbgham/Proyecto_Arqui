@@ -40,6 +40,16 @@ spec:
               value: "http://analytics-service:8080"
             - name: EMAIL_SERVICE_URL
               value: "http://email-service:8080"
+            - name: MINIO_ENDPOINT
+              value: "http://minio:9000"
+            - name: MINIO_ACCESS_KEY
+              value: "puj_minio"
+            - name: MINIO_SECRET_KEY
+              value: "puj_minio_secret"
+            - name: MINIO_BUCKET
+              value: "course-files"
+            - name: MINIO_PUBLIC_URL
+              value: "http://platform.local"
           readinessProbe:
             httpGet:
               path: /

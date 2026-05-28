@@ -105,8 +105,8 @@ kubectl apply -k "$ROOT/infra/overlays/local/"
 
 # ── 6. Esperar a que los pods arranquen ───────────────────────────────────────
 echo ""
-echo "Esperando pods de infraestructura (postgres, redis, rabbitmq, mailhog)..."
-for infra in postgres redis rabbitmq mailhog; do
+echo "Esperando pods de infraestructura (postgres, redis, rabbitmq, mailhog, minio)..."
+for infra in postgres redis rabbitmq mailhog minio; do
   kubectl rollout status deployment/$infra -n puj-platform --timeout=180s || \
     echo "  ⚠ $infra tardó más de 3 min — continúa en background"
 done
@@ -242,6 +242,10 @@ echo ""
 echo "  MailHog (correos capturados) — en otra terminal:"
 echo "    kubectl port-forward svc/mailhog 8025:8025 -n puj-platform"
 echo "    → http://localhost:8025"
+echo ""
+echo "  MinIO Console (archivos subidos) — en otra terminal:"
+echo "    kubectl port-forward svc/minio 9001:9001 -n puj-platform"
+echo "    → http://localhost:9001  (puj_minio / puj_minio_secret)"
 echo ""
 echo "  RabbitMQ management — en otra terminal:"
 echo "    kubectl port-forward svc/rabbitmq 15672:15672 -n puj-platform"
