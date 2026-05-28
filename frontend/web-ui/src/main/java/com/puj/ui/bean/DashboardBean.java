@@ -43,6 +43,21 @@ public class DashboardBean {
     private List<Map<String, Object>> topCourses    = new ArrayList<>();
     private List<Map<String, Object>> inactiveUsers = new ArrayList<>();
 
+    // Course stats (from course-service) — ADMIN / DIRECTOR
+    public static class CourseStatRow {
+        private final String courseId, courseTitle;
+        private final long   count;
+        public CourseStatRow(String courseId, String courseTitle, long count) {
+            this.courseId = courseId; this.courseTitle = courseTitle; this.count = count;
+        }
+        public String getCourseId()    { return courseId; }
+        public String getCourseTitle() { return courseTitle; }
+        public long   getCount()       { return count; }
+    }
+    private long                totalCompletedEnrollments = 0;
+    private List<CourseStatRow> popularCourseStats        = new ArrayList<>();
+    private List<CourseStatRow> completedCourseStats      = new ArrayList<>();
+
     // STUDENT / INSTRUCTOR
     public static class EnrolledCourse {
         private final String courseId, title, status;
@@ -146,6 +161,7 @@ public class DashboardBean {
         if (session.hasRole("DIRECTOR", "ADMIN")) {
             loadSummary();
             loadTopCourses();
+            loadCourseStats();
             loadInactiveUsers();
         } else if (session.hasRole("STUDENT")) {
             loadEnrolledCourses();
@@ -208,6 +224,27 @@ public class DashboardBean {
                     m.put("lastLoginAt", n.path("lastLoginAt").asText("Nunca"));
                     inactiveUsers.add(m);
                 });
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void loadCourseStats() {
+        try {
+            HttpRequest req = bearer(COURSE_URL + "/api/v1/enrollments/admin/course-stats?limit=5");
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200) {
+                JsonNode root = mapper.readTree(resp.body());
+                totalCompletedEnrollments = root.path("totalCompletedEnrollments").asLong(0);
+                root.path("popularCourses").forEach(n -> popularCourseStats.add(
+                        new CourseStatRow(
+                                n.path("courseId").asText(),
+                                n.path("courseTitle").asText(),
+                                n.path("enrollCount").asLong(0))));
+                root.path("completedCourses").forEach(n -> completedCourseStats.add(
+                        new CourseStatRow(
+                                n.path("courseId").asText(),
+                                n.path("courseTitle").asText(),
+                                n.path("completedCount").asLong(0))));
             }
         } catch (Exception ignored) {}
     }
@@ -430,6 +467,9 @@ public class DashboardBean {
     public double getOverallPassRate()  { return overallPassRate; }
     public List<Map<String, Object>>    getTopCourses()        { return topCourses; }
     public List<Map<String, Object>>    getInactiveUsers()     { return inactiveUsers; }
+    public long                getTotalCompletedEnrollments() { return totalCompletedEnrollments; }
+    public List<CourseStatRow> getPopularCourseStats()        { return popularCourseStats; }
+    public List<CourseStatRow> getCompletedCourseStats()      { return completedCourseStats; }
     public List<EnrolledCourse>         getEnrolledCourses()   { return enrolledCourses; }
     public List<MyCourse>               getInstructorCourses() { return instructorCourses; }
     public List<StudentCourseStats>     getStudentGrades()     { return studentGrades; }
