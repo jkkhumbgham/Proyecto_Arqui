@@ -293,14 +293,32 @@
                                 <div style="font-size:.78rem;color:#888;">Evaluación del curso · Aprobación: #{asmt.passingScorePct}%</div>
                             </div>
                         </div>
-                        <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')
-                                                   and courseBean.isEnrolled(courseBean.selectedCourseId)}">
-                            <h:link value="Tomar evaluación" outcome="/views/assessment-take"
-                                    styleClass="btn btn-primary btn-sm">
-                                <f:param name="assessmentId" value="#{asmt.id}"/>
-                                <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
-                            </h:link>
-                        </h:panelGroup>
+                        <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;">
+                            <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')
+                                                       and courseBean.isEnrolled(courseBean.selectedCourseId)}">
+                                <h:link value="Tomar evaluación" outcome="/views/assessment-take"
+                                        styleClass="btn btn-primary btn-sm">
+                                    <f:param name="assessmentId" value="#{asmt.id}"/>
+                                    <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                </h:link>
+                            </h:panelGroup>
+                            <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                                <h:link value="Editar" outcome="/views/assessment-edit"
+                                        styleClass="btn btn-secondary btn-sm">
+                                    <f:param name="assessmentId" value="#{asmt.id}"/>
+                                    <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                </h:link>
+                            </h:panelGroup>
+                            <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                                <h:form style="display:inline;">
+                                    <h:commandButton value="Eliminar"
+                                                     styleClass="btn btn-secondary btn-sm"
+                                                     style="color:#c0392b;border-color:#e8c4c4;"
+                                                     action="#{editBean.deleteAssessment(asmt.id, courseBean.selectedCourseId)}"
+                                                     onclick="return confirm('¿Eliminar esta evaluación? Esta acción no se puede deshacer.')"/>
+                                </h:form>
+                            </h:panelGroup>
+                        </div>
                     </div>
                 </h:panelGroup>
             </ui:repeat>
