@@ -124,6 +124,42 @@ public class EnrollmentResource {
         return Response.ok(Map.of("uniqueStudents", count)).build();
     }
 
+    @GET
+    @Path("/admin/course-stats")
+    @RequiresRole({Role.ADMIN})
+    @Operation(summary = "Estadísticas globales de cursos para el panel de administración (ADMIN)")
+    public Response adminCourseStats(
+            @QueryParam("limit") @DefaultValue("5") int limit) {
+
+        int safeLimit = Math.min(Math.max(limit, 1), 20);
+
+        long totalCompleted = enrollmentRepo.countCompleted();
+
+        List<Map<String, Object>> popular = enrollmentRepo.topPopularCourses(safeLimit)
+                .stream().map(row -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("courseId",    row[0].toString());
+                    m.put("courseTitle", row[1].toString());
+                    m.put("enrollCount", ((Number) row[2]).longValue());
+                    return m;
+                }).collect(Collectors.toList());
+
+        List<Map<String, Object>> completed = enrollmentRepo.topCompletedCourses(safeLimit)
+                .stream().map(row -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("courseId",       row[0].toString());
+                    m.put("courseTitle",    row[1].toString());
+                    m.put("completedCount", ((Number) row[2]).longValue());
+                    return m;
+                }).collect(Collectors.toList());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("totalCompletedEnrollments", totalCompleted);
+        result.put("popularCourses",            popular);
+        result.put("completedCourses",          completed);
+        return Response.ok(result).build();
+    }
+
     @DELETE
     @Path("/courses/{courseId}")
     @RequiresRole(Role.STUDENT)

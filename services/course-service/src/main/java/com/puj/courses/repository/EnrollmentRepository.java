@@ -104,4 +104,47 @@ public class EnrollmentRepository {
                 .setParameter("cid", courseId)
                 .getSingleResult();
     }
+
+    /** Total de inscripciones con status COMPLETED. */
+    public long countCompleted() {
+        return em.createQuery(
+                        "SELECT COUNT(e) FROM Enrollment e" +
+                        " WHERE e.status = com.puj.courses.entity.EnrollmentStatus.COMPLETED" +
+                        " AND e.deletedAt IS NULL",
+                        Long.class)
+                .getSingleResult();
+    }
+
+    /**
+     * Top N cursos por cantidad total de inscripciones activas (no canceladas).
+     * Devuelve Object[]: [courseId, courseTitle, enrollCount]
+     */
+    public List<Object[]> topPopularCourses(int limit) {
+        return em.createQuery(
+                        "SELECT e.course.id, e.course.title, COUNT(e)" +
+                        " FROM Enrollment e" +
+                        " WHERE e.deletedAt IS NULL" +
+                        " GROUP BY e.course.id, e.course.title" +
+                        " ORDER BY COUNT(e) DESC",
+                        Object[].class)
+                .setMaxResults(limit)
+                .getResultList();
+    }
+
+    /**
+     * Top N cursos por cantidad de inscripciones COMPLETADAS.
+     * Devuelve Object[]: [courseId, courseTitle, completedCount]
+     */
+    public List<Object[]> topCompletedCourses(int limit) {
+        return em.createQuery(
+                        "SELECT e.course.id, e.course.title, COUNT(e)" +
+                        " FROM Enrollment e" +
+                        " WHERE e.status = com.puj.courses.entity.EnrollmentStatus.COMPLETED" +
+                        " AND e.deletedAt IS NULL" +
+                        " GROUP BY e.course.id, e.course.title" +
+                        " ORDER BY COUNT(e) DESC",
+                        Object[].class)
+                .setMaxResults(limit)
+                .getResultList();
+    }
 }

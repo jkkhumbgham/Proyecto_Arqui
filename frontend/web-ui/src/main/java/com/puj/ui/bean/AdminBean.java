@@ -83,12 +83,29 @@ public class AdminBean implements Serializable {
         public boolean isUp()          { return "UP".equals(status); }
     }
 
+    public static class CourseStatRow implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private final String courseId, courseTitle;
+        private final long   count;
+        public CourseStatRow(String courseId, String courseTitle, long count) {
+            this.courseId = courseId; this.courseTitle = courseTitle; this.count = count;
+        }
+        public String getCourseId()    { return courseId; }
+        public String getCourseTitle() { return courseTitle; }
+        public long   getCount()       { return count; }
+    }
+
     private List<UserRow>      users         = new ArrayList<>();
     private List<HealthStatus> healthChecks  = new ArrayList<>();
     private Map<String, String> selectedRoles = new HashMap<>();
     private long               totalUsers;
     private int                page          = 0;
     private static final int   PAGE_SIZE     = 20;
+
+    // Course stats
+    private List<CourseStatRow> popularCourses   = new ArrayList<>();
+    private List<CourseStatRow> completedCourses = new ArrayList<>();
+    private long                totalCompletedEnrollments = 0;
 
     // Create user form fields
     private String  newEmail, newPassword, newFirstName, newLastName;
@@ -107,6 +124,7 @@ public class AdminBean implements Serializable {
         catch (NumberFormatException e) { page = 0; }
         loadUsers();
         loadHealthChecks();
+        loadCourseStats();
     }
 
     private void loadUsers() {
@@ -145,6 +163,31 @@ public class AdminBean implements Serializable {
         checkHealth("collaboration-service", COLLAB_URL     + "/api/v1/health");
         checkHealth("analytics-service",     ANALYTICS_URL  + "/health");
         checkHealth("email-service",         EMAIL_URL      + "/health");
+    }
+
+    private void loadCourseStats() {
+        popularCourses.clear();
+        completedCourses.clear();
+        try {
+            String url = COURSE_URL + "/api/v1/enrollments/admin/course-stats?limit=5";
+            HttpResponse<String> resp = http().send(bearer(url), HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200) {
+                JsonNode root = mapper().readTree(resp.body());
+                totalCompletedEnrollments = root.path("totalCompletedEnrollments").asLong(0);
+                root.path("popularCourses").forEach(n -> popularCourses.add(
+                        new CourseStatRow(
+                                n.path("courseId").asText(),
+                                n.path("courseTitle").asText(),
+                                n.path("enrollCount").asLong(0))));
+                root.path("completedCourses").forEach(n -> completedCourses.add(
+                        new CourseStatRow(
+                                n.path("courseId").asText(),
+                                n.path("courseTitle").asText(),
+                                n.path("completedCount").asLong(0))));
+            }
+        } catch (Exception e) {
+            warn("No se pudo cargar estadísticas de cursos.");
+        }
     }
 
     private void checkHealth(String name, String url) {
@@ -322,6 +365,9 @@ public class AdminBean implements Serializable {
     // Getters / setters
     public List<UserRow>       getUsers()         { return users; }
     public List<HealthStatus>  getHealthChecks()  { return healthChecks; }
+    public List<CourseStatRow> getPopularCourses()          { return popularCourses; }
+    public List<CourseStatRow> getCompletedCourses()        { return completedCourses; }
+    public long getTotalCompletedEnrollments()              { return totalCompletedEnrollments; }
     public Map<String, String> getSelectedRoles() { return selectedRoles; }
     public void setSelectedRoles(Map<String, String> m) { this.selectedRoles = m; }
 
