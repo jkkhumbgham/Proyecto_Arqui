@@ -20,48 +20,16 @@
                 <div class="stat-label">Inscripciones totales</div>
             </div>
             <div class="stat-card">
+                <div class="stat-value">#{dashboardBean.totalCompletedEnrollments}</div>
+                <div class="stat-label">Completados</div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-value">#{dashboardBean.totalCourses}</div>
                 <div class="stat-label">Cursos activos</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value">#{dashboardBean.avgScore}%</div>
                 <div class="stat-label">Promedio evaluaciones</div>
-            </div>
-        </div>
-
-        <!-- Tarjetas resumen: inscripciones totales + completadas -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
-            <div class="card" style="background:linear-gradient(135deg,#1a3a6b 0%,#2563eb 100%);color:#fff;">
-                <div style="display:flex;align-items:center;gap:1.5rem;">
-                    <div style="font-size:3rem;line-height:1;">🎓</div>
-                    <div>
-                        <div style="font-size:.875rem;opacity:.85;text-transform:uppercase;letter-spacing:.05em;">
-                            Total Inscripciones
-                        </div>
-                        <div style="font-size:2.5rem;font-weight:700;line-height:1.1;">
-                            #{dashboardBean.totalEnrollments}
-                        </div>
-                        <div style="font-size:.8rem;opacity:.75;margin-top:.25rem;">
-                            Inscripciones activas en la plataforma
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="card" style="background:linear-gradient(135deg,#166534 0%,#16a34a 100%);color:#fff;">
-                <div style="display:flex;align-items:center;gap:1.5rem;">
-                    <div style="font-size:3rem;line-height:1;">✅</div>
-                    <div>
-                        <div style="font-size:.875rem;opacity:.85;text-transform:uppercase;letter-spacing:.05em;">
-                            Cursos Completados
-                        </div>
-                        <div style="font-size:2.5rem;font-weight:700;line-height:1.1;">
-                            #{dashboardBean.totalCompletedEnrollments}
-                        </div>
-                        <div style="font-size:.8rem;opacity:.75;margin-top:.25rem;">
-                            Inscripciones con 100% de progreso
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 

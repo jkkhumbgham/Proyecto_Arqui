@@ -125,13 +125,13 @@
                 <p style="font-size:.8rem;color:#999;">Máx: #{course.maxStudents} estudiantes</p>
 
                 <div style="margin-top:.85rem;display:flex;gap:.5rem;flex-wrap:wrap;">
-                    <c:if test="#{sessionBean.hasRole('STUDENT')}">
-                        <c:if test="#{courseBean.isEnrolled(course.id)}">
+                    <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')}">
+                        <h:panelGroup rendered="#{courseBean.isEnrolled(course.id)}">
                             <span class="badge badge-green" style="font-size:.78rem;padding:.3rem .65rem;">
                                 Inscrito
                             </span>
-                        </c:if>
-                        <c:if test="#{not courseBean.isEnrolled(course.id)}">
+                        </h:panelGroup>
+                        <h:panelGroup rendered="#{not courseBean.isEnrolled(course.id)}">
                             <h:form>
                                 <h:commandButton value="Inscribirse" action="#{courseBean.enroll}"
                                                  styleClass="btn btn-primary btn-sm"
@@ -140,8 +140,8 @@
                                                                  value="#{course.id}"/>
                                 </h:commandButton>
                             </h:form>
-                        </c:if>
-                    </c:if>
+                        </h:panelGroup>
+                    </h:panelGroup>
                     <h:link value="Ver detalle" outcome="/views/course-detail" styleClass="btn btn-secondary btn-sm">
                         <f:param name="courseId" value="#{course.id}"/>
                     </h:link>

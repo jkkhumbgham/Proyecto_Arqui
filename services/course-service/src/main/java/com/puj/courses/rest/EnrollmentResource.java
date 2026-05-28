@@ -1,12 +1,15 @@
 package com.puj.courses.rest;
 
 import com.puj.courses.dto.EnrollmentResponse;
+import com.puj.courses.entity.Enrollment;
+import com.puj.courses.entity.EnrollmentStatus;
 import com.puj.courses.repository.EnrollmentRepository;
 import com.puj.courses.service.EnrollmentService;
 import com.puj.security.rbac.AuthenticatedUser;
 import com.puj.security.rbac.RequiresRole;
 import com.puj.security.rbac.Role;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -160,6 +163,29 @@ public class EnrollmentResource {
         result.put("popularCourses",            popular);
         result.put("completedCourses",          completed);
         return Response.ok(result).build();
+    }
+
+    @POST
+    @Path("/courses/{courseId}/finalize")
+    @Transactional
+    @RequiresRole(Role.STUDENT)
+    @Operation(summary = "Finalizar curso (marcar COMPLETED) — requiere 100% progreso (STUDENT)")
+    public Response finalize(@PathParam("courseId") UUID courseId) {
+        UUID userId = UUID.fromString(authenticatedUser.getUserId());
+        Enrollment enrollment = enrollmentRepo.findByUserAndCourse(userId, courseId)
+                .orElse(null);
+        if (enrollment == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(Map.of("message", "Inscripción no encontrada")).build();
+        }
+        if (enrollment.getProgressPct() < 100.0) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("message", "El curso no está al 100% de progreso")).build();
+        }
+        enrollment.setStatus(EnrollmentStatus.COMPLETED);
+        enrollment.setCompletedAt(Instant.now());
+        enrollmentRepo.merge(enrollment);
+        return Response.ok(Map.of("status", "COMPLETED")).build();
     }
 
     @DELETE

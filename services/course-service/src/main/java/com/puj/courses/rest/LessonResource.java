@@ -1,7 +1,6 @@
 package com.puj.courses.rest;
 
 import com.puj.courses.entity.Enrollment;
-import com.puj.courses.entity.EnrollmentStatus;
 import com.puj.courses.entity.Lesson;
 import com.puj.courses.entity.LessonProgress;
 import com.puj.events.LessonCompletedEvent;
@@ -21,7 +20,6 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -188,10 +186,9 @@ public class LessonResource {
                 " AND e.deletedAt IS NULL", Enrollment.class)
                 .setParameter("uid", userId).setParameter("cid", courseId).getSingleResult();
             enrollment.setProgressPct(Math.min(100.0, pct));
-            if (pct >= 100.0) {
-                enrollment.setStatus(EnrollmentStatus.COMPLETED);
-                enrollment.setCompletedAt(Instant.now());
-            }
+            // COMPLETED ya no se asigna automáticamente:
+            // requiere que el estudiante apruebe todas las evaluaciones (≥60%)
+            // y llame a POST /enrollments/courses/{id}/finalize
             em.merge(enrollment);
         } catch (NoResultException ignored) {}
 

@@ -127,11 +127,12 @@ public class CourseBean implements Serializable {
     private Set<String>            unlockedSupplementaryLessonIds = new HashSet<>();
     private Set<String>            completedLessonIdsSet          = new HashSet<>();
 
-    private String selectedCourseId;
-    private double progressPct;
-    private int    completedLessons;
-    private int    totalLessons;
-    private String firstUncompletedLessonId;
+    private String  selectedCourseId;
+    private double  progressPct;
+    private int     completedLessons;
+    private int     totalLessons;
+    private String  firstUncompletedLessonId;
+    private boolean courseFinishable = false;
 
     private String newTitle;
     private String newDescription;
@@ -156,6 +157,7 @@ public class CourseBean implements Serializable {
                 resolveFirstUncompletedLesson();
                 computeModuleLocks();
                 loadUnlockedSupplementaryLessons(courseIdParam);
+                computeCourseFinishable();
             }
             return;
         }
@@ -276,6 +278,51 @@ public class CourseBean implements Serializable {
         return lockedModuleIds.contains(moduleId);
     }
 
+    /** Returns true if the student can open this lesson (completed, current, or unlocked supplementary). */
+    public boolean isLessonAccessible(String lessonId) {
+        if (!session.hasRole("STUDENT")) return true;
+        return completedLessonIdsSet.contains(lessonId)
+               || lessonId.equals(firstUncompletedLessonId)
+               || unlockedSupplementaryLessonIds.contains(lessonId);
+    }
+
+    /** Checks whether all assessments in this course have avgScorePct >= 60 for this student. */
+    private void computeCourseFinishable() {
+        if (progressPct < 100.0) return;
+        String userId = session.getUserId();
+        if (userId == null || userId.isBlank()) return;
+        if (courseAssessments.isEmpty()) { courseFinishable = true; return; }
+        courseFinishable = true;
+        for (AssessmentData a : courseAssessments) {
+            try {
+                String url = ASSESSMENT_URL + "/api/v1/submissions/avg-for-assessments"
+                        + "?userId=" + userId + "&assessmentIds=" + a.getId();
+                HttpResponse<String> resp = http().send(bearer(url), HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() != 200) { courseFinishable = false; return; }
+                double avg = mapper().readTree(resp.body()).path("avgScorePct").asDouble(0);
+                if (avg < 60.0) { courseFinishable = false; return; }
+            } catch (Exception ignored) { courseFinishable = false; return; }
+        }
+    }
+
+    public boolean isCourseFinishable() { return courseFinishable; }
+
+    /** JSF action: calls POST /enrollments/courses/{id}/finalize and redirects to dashboard. */
+    public String finalizeCourse() {
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(COURSE_URL + "/api/v1/enrollments/courses/" + selectedCourseId + "/finalize"))
+                    .header("Authorization", "Bearer " + session.getAccessToken())
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .timeout(Duration.ofSeconds(5)).build();
+            HttpResponse<String> resp = http().send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200) return "dashboard?faces-redirect=true";
+            warn("No se pudo finalizar el curso.");
+        } catch (Exception e) { warn("Error al finalizar el curso."); }
+        return null;
+    }
+
     private void loadEnrolledIds() {
         try {
             HttpResponse<String> resp = http().send(
@@ -390,6 +437,8 @@ public class CourseBean implements Serializable {
         } catch (Exception e) {
             warn("Error al inscribirse.");
         }
+        // Refrescar estado de inscripciones para que el render post-error sea correcto
+        loadEnrolledIds();
         return null;
     }
 
@@ -462,10 +511,10 @@ public class CourseBean implements Serializable {
     }
 
     // ---- accessors ----
-    public double getProgressPct()              { return Math.round(progressPct * 10.0) / 10.0; }
-    public int    getCompletedLessons()         { return completedLessons; }
-    public int    getTotalLessons()             { return totalLessons; }
-    public String getFirstUncompletedLessonId() { return firstUncompletedLessonId; }
+    public double  getProgressPct()              { return Math.round(progressPct * 10.0) / 10.0; }
+    public int     getCompletedLessons()         { return completedLessons; }
+    public int     getTotalLessons()             { return totalLessons; }
+    public String  getFirstUncompletedLessonId() { return firstUncompletedLessonId; }
 
     public List<CourseData>     getCourses()           { return courses; }
     public CourseData           getCourseDetail()      { return courseDetail; }
