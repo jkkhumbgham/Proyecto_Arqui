@@ -179,19 +179,20 @@
 
         <!-- ===== ESTADÍSTICAS DE CURSOS ===== -->
 
-        <!-- Panel: total cursos completados -->
+        <!-- Panel: total inscripciones -->
         <div class="card" style="margin-bottom:1.5rem;background:linear-gradient(135deg,#1a3a6b 0%,#2563eb 100%);color:#fff;">
             <div style="display:flex;align-items:center;gap:1.5rem;">
                 <div style="font-size:3rem;line-height:1;">🎓</div>
                 <div>
                     <div style="font-size:.875rem;opacity:.85;text-transform:uppercase;letter-spacing:.05em;">
-                        Cursos Completados (inscripciones)
+                        Total Inscripciones
                     </div>
                     <div style="font-size:2.5rem;font-weight:700;line-height:1.1;">
-                        #{adminBean.totalCompletedEnrollments}
+                        #{adminBean.totalEnrollments}
                     </div>
                     <div style="font-size:.8rem;opacity:.75;margin-top:.25rem;">
-                        Total histórico de inscripciones con 100% progreso
+                        Inscripciones activas en la plataforma ·
+                        <span style="font-weight:600;">#{adminBean.totalCompletedEnrollments}</span> completadas
                     </div>
                 </div>
             </div>

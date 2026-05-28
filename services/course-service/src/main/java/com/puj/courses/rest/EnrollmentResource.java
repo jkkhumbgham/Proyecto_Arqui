@@ -133,7 +133,8 @@ public class EnrollmentResource {
 
         int safeLimit = Math.min(Math.max(limit, 1), 20);
 
-        long totalCompleted = enrollmentRepo.countCompleted();
+        long totalEnrollments = enrollmentRepo.countAll();
+        long totalCompleted   = enrollmentRepo.countCompleted();
 
         List<Map<String, Object>> popular = enrollmentRepo.topPopularCourses(safeLimit)
                 .stream().map(row -> {
@@ -154,6 +155,7 @@ public class EnrollmentResource {
                 }).collect(Collectors.toList());
 
         Map<String, Object> result = new LinkedHashMap<>();
+        result.put("totalEnrollments",          totalEnrollments);
         result.put("totalCompletedEnrollments", totalCompleted);
         result.put("popularCourses",            popular);
         result.put("completedCourses",          completed);

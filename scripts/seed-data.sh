@@ -131,6 +131,33 @@ else
 fi
 ok "analytics_db truncada (counters en cero)"
 
+# d) Reset learning_platform — limpia cursos, inscripciones, evaluaciones y
+#    colaboración para que cada ejecución parta de cero. Los usuarios NO se
+#    tocan (se reutilizan / crean de forma idempotente más adelante).
+info "Reseteando learning_platform (cursos, evaluaciones, colaboración)..."
+$PSQL -c "
+TRUNCATE
+  courses.lesson_progress,
+  courses.lesson_contents,
+  courses.s3_resources,
+  courses.lessons,
+  courses.modules,
+  courses.enrollments,
+  courses.courses,
+  assessments.submissions,
+  assessments.adaptive_rules,
+  assessments.answer_options,
+  assessments.questions,
+  assessments.assessments,
+  collaboration.chat_messages,
+  collaboration.group_members,
+  collaboration.posts,
+  collaboration.threads,
+  collaboration.forums,
+  collaboration.study_groups
+CASCADE;" > /dev/null 2>&1 || true
+ok "learning_platform truncada (cursos/evaluaciones/colaboración en cero)"
+
 # b) Productores: cada servicio Java reporta rabbitMQ:true en su /health
 #    (la inyección de RabbitMQConnectionProvider llama isAvailable() en cada check)
 wait_mq_producer() {

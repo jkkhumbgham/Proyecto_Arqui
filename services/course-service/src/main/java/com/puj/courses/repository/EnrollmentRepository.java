@@ -105,6 +105,14 @@ public class EnrollmentRepository {
                 .getSingleResult();
     }
 
+    /** Total de inscripciones activas (cualquier status, no canceladas/eliminadas). */
+    public long countAll() {
+        return em.createQuery(
+                        "SELECT COUNT(e) FROM Enrollment e WHERE e.deletedAt IS NULL",
+                        Long.class)
+                .getSingleResult();
+    }
+
     /** Total de inscripciones con status COMPLETED. */
     public long countCompleted() {
         return em.createQuery(

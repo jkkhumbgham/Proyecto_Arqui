@@ -103,8 +103,9 @@ public class AdminBean implements Serializable {
     private static final int   PAGE_SIZE     = 20;
 
     // Course stats
-    private List<CourseStatRow> popularCourses   = new ArrayList<>();
-    private List<CourseStatRow> completedCourses = new ArrayList<>();
+    private List<CourseStatRow> popularCourses            = new ArrayList<>();
+    private List<CourseStatRow> completedCourses          = new ArrayList<>();
+    private long                totalEnrollments          = 0;
     private long                totalCompletedEnrollments = 0;
 
     // Create user form fields
@@ -173,6 +174,7 @@ public class AdminBean implements Serializable {
             HttpResponse<String> resp = http().send(bearer(url), HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() == 200) {
                 JsonNode root = mapper().readTree(resp.body());
+                totalEnrollments          = root.path("totalEnrollments").asLong(0);
                 totalCompletedEnrollments = root.path("totalCompletedEnrollments").asLong(0);
                 root.path("popularCourses").forEach(n -> popularCourses.add(
                         new CourseStatRow(
@@ -367,6 +369,7 @@ public class AdminBean implements Serializable {
     public List<HealthStatus>  getHealthChecks()  { return healthChecks; }
     public List<CourseStatRow> getPopularCourses()          { return popularCourses; }
     public List<CourseStatRow> getCompletedCourses()        { return completedCourses; }
+    public long getTotalEnrollments()                        { return totalEnrollments; }
     public long getTotalCompletedEnrollments()              { return totalCompletedEnrollments; }
     public Map<String, String> getSelectedRoles() { return selectedRoles; }
     public void setSelectedRoles(Map<String, String> m) { this.selectedRoles = m; }

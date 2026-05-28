@@ -23,35 +23,52 @@ public class AssessmentSubmittedConsumer(
             return;
         }
 
-        // ── Platform-wide counters ────────────────────────────────────────────
-        var stats = await db.PlatformStats.FirstOrDefaultAsync();
-        if (stats == null) { stats = new PlatformStats(); db.PlatformStats.Add(stats); }
-        stats.TotalSubmissions++;
-        if (msg.MaxScore > 0)
+        decimal scoreToAdd    = msg.MaxScore > 0 ? msg.Score    : 0m;
+        decimal maxScoreToAdd = msg.MaxScore > 0 ? msg.MaxScore : 0m;
+        int     passIncrement = msg.Passed ? 1 : 0;
+
+        // ── Platform-wide counters (totalmente atómicos con raw SQL) ──────────
+        int updated = await db.Database.ExecuteSqlRawAsync(
+            "UPDATE analytics.platform_stats " +
+            "SET total_submissions  = total_submissions  + 1, " +
+            "    raw_score_sum      = raw_score_sum      + {0}, " +
+            "    raw_max_score_sum  = raw_max_score_sum  + {1}, " +
+            "    pass_count         = pass_count         + {2}, " +
+            "    updated_at         = NOW()",
+            scoreToAdd, maxScoreToAdd, passIncrement);
+
+        if (updated == 0)
         {
-            stats.RawScoreSum    += msg.Score;
-            stats.RawMaxScoreSum += msg.MaxScore;
+            // Primera fila de platform_stats — no debería ocurrir después de enrollments,
+            // pero lo manejamos por si analytics_db fue truncada parcialmente.
+            db.PlatformStats.Add(new PlatformStats {
+                TotalSubmissions = 1,
+                RawScoreSum      = scoreToAdd,
+                RawMaxScoreSum   = maxScoreToAdd,
+                PassCount        = passIncrement,
+                UpdatedAt        = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
         }
-        if (msg.Passed) stats.PassCount++;
-        stats.UpdatedAt = DateTime.UtcNow;
 
         // ── Per-course counters ───────────────────────────────────────────────
-        var metric = await db.CourseMetrics.FirstOrDefaultAsync(m => m.CourseId == courseId);
-        if (metric == null)
-        {
-            metric = new CourseMetric { CourseId = courseId };
-            db.CourseMetrics.Add(metric);
-            stats.TotalCourses++;
-        }
-        metric.TotalSubmissions++;
-        if (msg.MaxScore > 0)
-        {
-            metric.RawScoreSum    += msg.Score;
-            metric.RawMaxScoreSum += msg.MaxScore;
-        }
-        if (msg.Passed) metric.PassCount++;
-        metric.UpdatedAt = DateTime.UtcNow;
+        // IMPORTANTE: solo actualizamos si el CourseMetric ya existe.
+        // La creación del CourseMetric y el conteo de TotalCourses es
+        // responsabilidad exclusiva de CourseEnrolledConsumer.
+        // Esto evita que submissions inflen TotalCourses en el dashboard.
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE analytics.course_metrics " +
+            "SET total_submissions  = total_submissions  + 1, " +
+            "    raw_score_sum      = raw_score_sum      + {0}, " +
+            "    raw_max_score_sum  = raw_max_score_sum  + {1}, " +
+            "    pass_count         = pass_count         + {2}, " +
+            "    updated_at         = NOW() " +
+            "WHERE course_id = {3}",
+            scoreToAdd, maxScoreToAdd, passIncrement, courseId);
 
-        await db.SaveChangesAsync();
+        // Si el metric no existe todavía (edge case: submission llega antes del enrollment),
+        // los contadores del curso quedarán desactualizados — se corregirán cuando
+        // llegue el COURSE_ENROLLED correspondiente y cree el metric.
+        logger.LogInformation("ASSESSMENT_SUBMITTED procesado: CourseId={CourseId} Passed={Passed}", courseId, msg.Passed);
     }
 }
