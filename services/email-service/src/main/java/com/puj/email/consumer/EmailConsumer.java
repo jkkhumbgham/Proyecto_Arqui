@@ -66,8 +66,10 @@ public class EmailConsumer {
     @PreDestroy
     void stop() {
         running = false;
-        try { if (channel    != null) channel.close();    } catch (Exception ignored) {}
-        try { if (connection != null) connection.close(); } catch (Exception ignored) {}
+        try { if (channel    != null) channel.close();    }
+        catch (Exception e) { LOG.warning("Error cerrando canal RabbitMQ: " + e.getMessage()); }
+        try { if (connection != null) connection.close(); }
+        catch (Exception e) { LOG.warning("Error cerrando conexión RabbitMQ: " + e.getMessage()); }
         if (executor != null) executor.shutdownNow();
     }
 

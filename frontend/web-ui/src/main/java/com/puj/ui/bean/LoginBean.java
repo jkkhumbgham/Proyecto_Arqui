@@ -1,17 +1,13 @@
 package com.puj.ui.bean;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.puj.ui.service.ApiClientService;
+import com.puj.ui.util.FacesMessageUtil;
 import jakarta.enterprise.context.RequestScoped;
-import jakarta.faces.application.FacesMessage;
-import jakarta.faces.context.FacesContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.util.Map;
 
 @Named
 @RequestScoped
@@ -20,34 +16,22 @@ public class LoginBean {
     private static final String USER_URL =
             System.getenv().getOrDefault("USER_SERVICE_URL", "http://user-service:8080");
 
-    @Inject private SessionBean session;
+    @Inject private SessionBean      session;
+    @Inject private ApiClientService api;
 
-    private String email;
-    private String password;
-    private String firstName;
-    private String lastName;
+    private String  email;
+    private String  password;
+    private String  firstName;
+    private String  lastName;
     private boolean consentGiven;
-
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .build();
-    private final ObjectMapper mapper = new ObjectMapper();
 
     public String login() {
         try {
-            String body = String.format("{\"email\":\"%s\",\"password\":\"%s\"}", email, password);
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(USER_URL + "/api/v1/auth/login"))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body))
-                    .timeout(Duration.ofSeconds(5))
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(request,
-                    HttpResponse.BodyHandlers.ofString());
+            String body = api.toJson(Map.of("email", email, "password", password));
+            HttpResponse<String> response = api.postPublic(USER_URL + "/api/v1/auth/login", body);
 
             if (response.statusCode() == 200) {
-                var json = mapper.readTree(response.body());
+                var json = api.readTree(response.body());
                 session.init(
                         json.get("accessToken").asText(),
                         json.path("user").path("id").asText(),
@@ -56,69 +40,50 @@ public class LoginBean {
                 );
                 password = null;
                 return "/views/dashboard?faces-redirect=true";
-            } else {
-                FacesContext.getCurrentInstance().addMessage(null,
-                        new FacesMessage(FacesMessage.SEVERITY_ERROR,
-                                "Credenciales inválidas.", null));
-                return null;
             }
+            FacesMessageUtil.error("Credenciales inválidas.");
         } catch (Exception e) {
-            FacesContext.getCurrentInstance().addMessage(null,
-                    new FacesMessage(FacesMessage.SEVERITY_ERROR,
-                            "Error de conexión. Intenta de nuevo.", null));
-            return null;
+            FacesMessageUtil.error("Error de conexión. Intenta de nuevo.");
         }
+        return null;
     }
 
     public String register() {
         try {
-            String body = String.format(
-                    "{\"email\":\"%s\",\"password\":\"%s\",\"firstName\":\"%s\",\"lastName\":\"%s\",\"consentGiven\":%b}",
-                    email, password,
-                    firstName  != null ? firstName  : "",
-                    lastName   != null ? lastName   : "",
-                    consentGiven);
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(USER_URL + "/api/v1/auth/register"))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body))
-                    .timeout(Duration.ofSeconds(5))
-                    .build();
-            HttpResponse<String> response = httpClient.send(request,
-                    HttpResponse.BodyHandlers.ofString());
+            Map<String, Object> bodyMap = Map.of(
+                    "email",        email,
+                    "password",     password,
+                    "firstName",    firstName  != null ? firstName  : "",
+                    "lastName",     lastName   != null ? lastName   : "",
+                    "consentGiven", consentGiven
+            );
+            HttpResponse<String> response = api.postPublic(USER_URL + "/api/v1/auth/register",
+                    api.toJson(bodyMap));
             if (response.statusCode() == 201) {
-                FacesContext.getCurrentInstance().addMessage(null,
-                        new FacesMessage(FacesMessage.SEVERITY_INFO,
-                                "Registro exitoso. Por favor inicia sesión.", null));
+                FacesMessageUtil.info("Registro exitoso. Por favor inicia sesión.");
                 return "/views/login?faces-redirect=true";
             }
-            var err = mapper.readTree(response.body());
-            FacesContext.getCurrentInstance().addMessage(null,
-                    new FacesMessage(FacesMessage.SEVERITY_ERROR,
-                            err.path("message").asText("Error al registrarse."), null));
+            String msg = api.readTree(response.body()).path("message").asText("Error al registrarse.");
+            FacesMessageUtil.error(msg);
         } catch (Exception e) {
-            FacesContext.getCurrentInstance().addMessage(null,
-                    new FacesMessage(FacesMessage.SEVERITY_ERROR,
-                            "Error de conexión.", null));
+            FacesMessageUtil.error("Error de conexión.");
         }
         return null;
     }
 
     public String redirectIfAuthenticated() {
-        if (session.isAuthenticated()) {
-            return "/views/dashboard?faces-redirect=true";
-        }
+        if (session.isAuthenticated()) return "/views/dashboard?faces-redirect=true";
         return null;
     }
 
-    public String getEmail()                  { return email; }
-    public void   setEmail(String e)          { this.email = e; }
-    public String getPassword()               { return password; }
-    public void   setPassword(String p)       { this.password = p; }
-    public String getFirstName()              { return firstName; }
-    public void   setFirstName(String f)      { this.firstName = f; }
-    public String getLastName()               { return lastName; }
-    public void   setLastName(String l)       { this.lastName = l; }
-    public boolean isConsentGiven()           { return consentGiven; }
-    public void    setConsentGiven(boolean c) { this.consentGiven = c; }
+    public String  getEmail()                  { return email; }
+    public void    setEmail(String e)          { this.email = e; }
+    public String  getPassword()               { return password; }
+    public void    setPassword(String p)       { this.password = p; }
+    public String  getFirstName()              { return firstName; }
+    public void    setFirstName(String f)      { this.firstName = f; }
+    public String  getLastName()               { return lastName; }
+    public void    setLastName(String l)       { this.lastName = l; }
+    public boolean isConsentGiven()            { return consentGiven; }
+    public void    setConsentGiven(boolean c)  { this.consentGiven = c; }
 }

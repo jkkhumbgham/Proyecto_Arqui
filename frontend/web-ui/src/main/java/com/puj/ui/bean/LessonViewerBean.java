@@ -1,20 +1,17 @@
 package com.puj.ui.bean;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.puj.ui.service.ApiClientService;
+import com.puj.ui.util.FacesMessageUtil;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.RequestScoped;
-import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -29,10 +26,8 @@ public class LessonViewerBean {
     private static final String ASSESSMENT_URL =
             System.getenv().getOrDefault("ASSESSMENT_SERVICE_URL", "http://assessment-service:8080");
 
-    @Inject private SessionBean session;
-
-    private final HttpClient   http   = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-    private final ObjectMapper mapper = new ObjectMapper();
+    @Inject private SessionBean      session;
+    @Inject private ApiClientService api;
 
     private String  lessonId;
     private String  courseId;
@@ -64,10 +59,9 @@ public class LessonViewerBean {
         public String getContentUrl()  { return contentUrl; }
     }
 
-    // Progress
     private Set<String> completedLessonIds = new HashSet<>();
-    private int   completedCount;
-    private int   totalLessons;
+    private int    completedCount;
+    private int    totalLessons;
     private double progressPct;
     private boolean alreadyCompleted;
 
@@ -107,17 +101,17 @@ public class LessonViewerBean {
             this.id = id; this.title = title; this.moduleTitle = moduleTitle;
             this.orderIndex = orderIndex; this.supplementary = supplementary;
         }
-        public String  getId()               { return id; }
-        public String  getTitle()            { return title; }
-        public String  getModuleTitle()      { return moduleTitle; }
-        public int     getOrderIndex()       { return orderIndex; }
-        public boolean isSupplementary()     { return supplementary; }
-        public boolean isCompleted()         { return completed; }
-        public void    setCompleted(boolean c)        { this.completed = c; }
-        public String  getAssessmentId()     { return assessmentId; }
-        public String  getAssessmentTitle()  { return assessmentTitle; }
-        public void    setAssessmentId(String id)     { this.assessmentId = id; }
-        public void    setAssessmentTitle(String t)   { this.assessmentTitle = t; }
+        public String  getId()             { return id; }
+        public String  getTitle()          { return title; }
+        public String  getModuleTitle()    { return moduleTitle; }
+        public int     getOrderIndex()     { return orderIndex; }
+        public boolean isSupplementary()   { return supplementary; }
+        public boolean isCompleted()       { return completed; }
+        public void    setCompleted(boolean c)      { this.completed = c; }
+        public String  getAssessmentId()   { return assessmentId; }
+        public String  getAssessmentTitle(){ return assessmentTitle; }
+        public void    setAssessmentId(String id)   { this.assessmentId = id; }
+        public void    setAssessmentTitle(String t) { this.assessmentTitle = t; }
     }
 
     @PostConstruct
@@ -141,13 +135,8 @@ public class LessonViewerBean {
 
         if ("1".equals(params.get("complete")) && session.hasRole("STUDENT")) {
             try {
-                HttpRequest req = HttpRequest.newBuilder()
-                        .uri(URI.create(COURSE_URL + "/api/v1/lessons/" + lessonId + "/complete"))
-                        .header("Authorization", "Bearer " + session.getAccessToken())
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.noBody())
-                        .timeout(Duration.ofSeconds(5)).build();
-                http.send(req, HttpResponse.BodyHandlers.ofString());
+                api.postEmpty(COURSE_URL + "/api/v1/lessons/" + lessonId + "/complete",
+                        session.getAccessToken());
             } catch (Exception ignored) {}
 
             try {
@@ -163,13 +152,10 @@ public class LessonViewerBean {
 
     private void loadLesson() {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/lessons/" + lessonId))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(COURSE_URL + "/api/v1/lessons/" + lessonId,
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode n = mapper.readTree(resp.body());
+                JsonNode n = api.readTree(resp.body());
                 title           = n.path("title").asText();
                 content         = n.path("content").asText("");
                 durationMinutes = n.path("durationMinutes").isNull() ? null : n.path("durationMinutes").asInt();
@@ -181,19 +167,17 @@ public class LessonViewerBean {
                 }
             }
         } catch (Exception e) {
-            warn("No se pudo cargar la lección.");
+            FacesMessageUtil.warn("No se pudo cargar la lección.");
         }
     }
 
     private void loadLessonContents() {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/lessons/" + lessonId + "/contents"))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    COURSE_URL + "/api/v1/lessons/" + lessonId + "/contents",
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode arr = mapper.readTree(resp.body());
+                JsonNode arr = api.readTree(resp.body());
                 if (arr.isArray()) {
                     arr.forEach(n -> lessonContents.add(new LessonContent(
                             n.path("id").asText(),
@@ -210,17 +194,15 @@ public class LessonViewerBean {
     private void loadProgress() {
         if (!session.hasRole("STUDENT")) return;
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/courses/" + courseId + "/progress"))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    COURSE_URL + "/api/v1/courses/" + courseId + "/progress",
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode n = mapper.readTree(resp.body());
+                JsonNode n = api.readTree(resp.body());
                 n.path("completedLessonIds").forEach(id -> completedLessonIds.add(id.asText()));
-                completedCount = (int) n.path("completedCount").asLong();
-                totalLessons   = (int) n.path("totalLessons").asLong();
-                progressPct    = n.path("progressPct").asDouble();
+                completedCount   = (int) n.path("completedCount").asLong();
+                totalLessons     = (int) n.path("totalLessons").asLong();
+                progressPct      = n.path("progressPct").asDouble();
                 alreadyCompleted = completedLessonIds.contains(lessonId);
             }
         } catch (Exception ignored) {}
@@ -228,21 +210,17 @@ public class LessonViewerBean {
 
     private void loadNavigation() {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/courses/" + courseId))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(COURSE_URL + "/api/v1/courses/" + courseId,
+                    session.getAccessToken());
             if (resp.statusCode() != 200) return;
 
-            JsonNode course = mapper.readTree(resp.body());
+            JsonNode course   = api.readTree(resp.body());
             boolean isStudent = session.hasRole("STUDENT");
             course.path("modules").forEach(m -> {
                 String modTitle = m.path("title").asText();
                 m.path("lessons").forEach(l -> {
                     boolean supp = l.path("supplementary").asBoolean(false);
-                    String lid   = l.path("id").asText();
-                    // Students skip supplementary lessons UNLESS it's the one they're currently viewing
+                    String  lid  = l.path("id").asText();
                     if (isStudent && supp && !lid.equals(lessonId)) return;
                     NavLesson nav = new NavLesson(lid, l.path("title").asText(), modTitle,
                             l.path("orderIndex").asInt(), supp);
@@ -267,17 +245,14 @@ public class LessonViewerBean {
         for (NavLesson nl : currentModuleLessons()) moduleLessonIds.add(nl.getId());
         if (moduleLessonIds.isEmpty()) return;
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(ASSESSMENT_URL + "/api/v1/assessments/course/" + courseId))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ASSESSMENT_URL + "/api/v1/assessments/course/" + courseId,
+                    session.getAccessToken());
             if (resp.statusCode() != 200) return;
-            JsonNode arr = mapper.readTree(resp.body());
+            JsonNode arr = api.readTree(resp.body());
             if (!arr.isArray()) return;
 
-            // Map every lesson in this module to its assessment
-            java.util.Map<String, JsonNode> lessonAssessmentNode = new java.util.HashMap<>();
+            Map<String, JsonNode> lessonAssessmentNode = new HashMap<>();
             for (JsonNode a : arr) {
                 if (a.path("lessonId").isNull() || a.path("lessonId").isMissingNode()) continue;
                 String aLessonId = a.path("lessonId").asText(null);
@@ -286,7 +261,6 @@ public class LessonViewerBean {
                 }
             }
 
-            // Set assessment info on each NavLesson for the sidebar
             for (NavLesson nl : navLessons) {
                 JsonNode a = lessonAssessmentNode.get(nl.getId());
                 if (a != null) {
@@ -295,7 +269,6 @@ public class LessonViewerBean {
                 }
             }
 
-            // Load full detail for the current lesson's assessment (main content card)
             JsonNode currentA = lessonAssessmentNode.get(lessonId);
             if (currentA != null) {
                 loadAssessmentDetail(currentA.path("id").asText(), lessonId);
@@ -305,14 +278,12 @@ public class LessonViewerBean {
 
     private void loadAssessmentDetail(String assessmentId, String linkedLessonId) {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(ASSESSMENT_URL + "/api/v1/assessments/" + assessmentId))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ASSESSMENT_URL + "/api/v1/assessments/" + assessmentId,
+                    session.getAccessToken());
             if (resp.statusCode() != 200) return;
-            JsonNode n = mapper.readTree(resp.body());
-            int qCount = n.path("questions").isArray() ? n.path("questions").size() : 0;
+            JsonNode n     = api.readTree(resp.body());
+            int      qCount = n.path("questions").isArray() ? n.path("questions").size() : 0;
             moduleAssessment = new CourseAssessment(
                     assessmentId,
                     n.path("title").asText(),
@@ -334,13 +305,8 @@ public class LessonViewerBean {
     public String toggleComplete() {
         if (lessonId == null || !session.hasRole("STUDENT")) return null;
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/lessons/" + lessonId + "/complete"))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.noBody())
-                    .timeout(Duration.ofSeconds(5)).build();
-            http.send(req, HttpResponse.BodyHandlers.ofString());
+            api.postEmpty(COURSE_URL + "/api/v1/lessons/" + lessonId + "/complete",
+                    session.getAccessToken());
         } catch (Exception ignored) {}
         return "/views/lesson-viewer?faces-redirect=true&lessonId=" + lessonId + "&courseId=" + courseId;
     }
@@ -348,13 +314,8 @@ public class LessonViewerBean {
     public String markComplete() {
         if (lessonId == null || !session.hasRole("STUDENT")) return null;
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/lessons/" + lessonId + "/complete"))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.noBody())
-                    .timeout(Duration.ofSeconds(5)).build();
-            http.send(req, HttpResponse.BodyHandlers.ofString());
+            api.postEmpty(COURSE_URL + "/api/v1/lessons/" + lessonId + "/complete",
+                    session.getAccessToken());
         } catch (Exception ignored) {}
 
         // @PostConstruct ran before Apply Request Values, so navLessons was never built.
@@ -367,14 +328,7 @@ public class LessonViewerBean {
         return "/views/course-detail?faces-redirect=true&courseId=" + courseId;
     }
 
-    public boolean isCompleted(String id) {
-        return completedLessonIds.contains(id);
-    }
-
-    private void warn(String msg) {
-        FacesContext.getCurrentInstance().addMessage(null,
-                new FacesMessage(FacesMessage.SEVERITY_WARN, msg, null));
-    }
+    public boolean isCompleted(String id) { return completedLessonIds.contains(id); }
 
     public String  getLessonId()        { return lessonId; }
     public void    setLessonId(String v){ this.lessonId = v; }
@@ -397,7 +351,7 @@ public class LessonViewerBean {
     public String  getContentUrl()      { return contentUrl; }
 
     public CourseAssessment    getModuleAssessment()  { return moduleAssessment; }
-    public List<LessonContent> getLessonContents()   { return lessonContents; }
+    public List<LessonContent> getLessonContents()    { return lessonContents; }
     public String              getSelectedContentId() { return selectedContentId; }
 
     public List<NavLesson> getModuleNavLessons() {

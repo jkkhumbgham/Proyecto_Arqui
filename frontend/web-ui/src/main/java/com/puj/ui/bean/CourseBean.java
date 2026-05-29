@@ -1,51 +1,38 @@
 package com.puj.ui.bean;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.puj.ui.service.ApiClientService;
+import com.puj.ui.util.FacesMessageUtil;
 import jakarta.annotation.PostConstruct;
-import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 
 import java.io.Serializable;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Logger;
 
 @Named
 @ViewScoped
 public class CourseBean implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+    private static final long   serialVersionUID = 1L;
+    private static final Logger LOG = Logger.getLogger(CourseBean.class.getName());
 
     private static final String COURSE_URL =
             System.getenv().getOrDefault("COURSE_SERVICE_URL", "http://course-service:8080");
     private static final String ASSESSMENT_URL =
             System.getenv().getOrDefault("ASSESSMENT_SERVICE_URL", "http://assessment-service:8080");
 
-    @Inject private SessionBean session;
-
-    private transient HttpClient  http;
-    private transient ObjectMapper mapper;
-
-    private HttpClient http() {
-        if (http == null) http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-        return http;
-    }
-    private ObjectMapper mapper() {
-        if (mapper == null) mapper = new ObjectMapper();
-        return mapper;
-    }
+    @Inject private SessionBean      session;
+    @Inject private ApiClientService api;
 
     // ---- typed data holders ----
     public static class CourseData implements Serializable {
@@ -65,8 +52,8 @@ public class CourseBean implements Serializable {
 
     public static class LessonData implements Serializable {
         private static final long serialVersionUID = 1L;
-        private final String id, title, content, assessmentId, assessmentTitle;
-        private final int orderIndex;
+        private final String  id, title, content, assessmentId, assessmentTitle;
+        private final int     orderIndex;
         private final Integer durationMinutes;
         private final boolean supplementary;
         public LessonData(String id, String title, String content, int orderIndex,
@@ -94,38 +81,38 @@ public class CourseBean implements Serializable {
         public AssessmentData(String id, String title, String lessonId, double passingScorePct) {
             this.id = id; this.title = title; this.lessonId = lessonId; this.passingScorePct = passingScorePct;
         }
-        public String getId()             { return id; }
-        public String getTitle()          { return title; }
-        public String getLessonId()       { return lessonId; }
-        public double getPassingScorePct(){ return passingScorePct; }
-        public boolean isCourseLevelOnly(){ return lessonId == null || lessonId.isBlank(); }
+        public String  getId()              { return id; }
+        public String  getTitle()           { return title; }
+        public String  getLessonId()        { return lessonId; }
+        public double  getPassingScorePct() { return passingScorePct; }
+        public boolean isCourseLevelOnly()  { return lessonId == null || lessonId.isBlank(); }
     }
 
     public static class ModuleData implements Serializable {
         private static final long serialVersionUID = 1L;
-        private final String id, title, description;
-        private final int orderIndex;
+        private final String          id, title, description;
+        private final int             orderIndex;
         private final List<LessonData> lessons;
         public ModuleData(String id, String title, String description, int orderIndex,
                           List<LessonData> lessons) {
             this.id = id; this.title = title; this.description = description;
             this.orderIndex = orderIndex; this.lessons = lessons;
         }
-        public String          getId()          { return id; }
-        public String          getTitle()       { return title; }
-        public String          getDescription() { return description; }
-        public int             getOrderIndex()  { return orderIndex; }
-        public List<LessonData> getLessons()    { return lessons; }
+        public String           getId()          { return id; }
+        public String           getTitle()       { return title; }
+        public String           getDescription() { return description; }
+        public int              getOrderIndex()  { return orderIndex; }
+        public List<LessonData> getLessons()     { return lessons; }
     }
 
-    private List<CourseData>       courses             = new ArrayList<>();
-    private CourseData             courseDetail;
-    private List<ModuleData>       modules             = new ArrayList<>();
-    private List<AssessmentData>   courseAssessments   = new ArrayList<>();
-    private Set<String>            enrolledCourseIds   = new HashSet<>();
-    private Set<String>            lockedModuleIds     = new HashSet<>();
-    private Set<String>            unlockedSupplementaryLessonIds = new HashSet<>();
-    private Set<String>            completedLessonIdsSet          = new HashSet<>();
+    private List<CourseData>     courses           = new ArrayList<>();
+    private CourseData           courseDetail;
+    private List<ModuleData>     modules           = new ArrayList<>();
+    private List<AssessmentData> courseAssessments = new ArrayList<>();
+    private Set<String>          enrolledCourseIds = new HashSet<>();
+    private Set<String>          lockedModuleIds   = new HashSet<>();
+    private Set<String>          unlockedSupplementaryLessonIds = new HashSet<>();
+    private Set<String>          completedLessonIdsSet          = new HashSet<>();
 
     private String  selectedCourseId;
     private double  progressPct;
@@ -145,7 +132,7 @@ public class CourseBean implements Serializable {
 
         String courseIdParam = FacesContext.getCurrentInstance()
                 .getExternalContext().getRequestParameterMap().get("courseId");
-        System.err.println("[CourseBean] @PostConstruct courseIdParam=" + courseIdParam + " selectedCourseId=" + selectedCourseId);
+        LOG.fine("[CourseBean] @PostConstruct courseIdParam=" + courseIdParam);
         if (courseIdParam != null && !courseIdParam.isBlank()) {
             selectedCourseId = courseIdParam;
             if (session.hasRole("STUDENT")) {
@@ -173,31 +160,25 @@ public class CourseBean implements Serializable {
         }
     }
 
-    // ---- course list loading ----
-
     private void loadPublicCourses() {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/courses"))
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            populateCourses(http().send(req, HttpResponse.BodyHandlers.ofString()));
+            populateCourses(api.getPublic(COURSE_URL + "/api/v1/courses"));
         } catch (Exception e) {
-            warn("No se pudo cargar el catálogo de cursos.");
+            FacesMessageUtil.warn("No se pudo cargar el catálogo de cursos.");
         }
     }
 
     private void loadMyCourses() {
         try {
-            populateCourses(http().send(bearer(COURSE_URL + "/api/v1/courses/my"),
-                    HttpResponse.BodyHandlers.ofString()));
+            populateCourses(api.get(COURSE_URL + "/api/v1/courses/my", session.getAccessToken()));
         } catch (Exception e) {
-            warn("No se pudo cargar tus cursos.");
+            FacesMessageUtil.warn("No se pudo cargar tus cursos.");
         }
     }
 
     private void populateCourses(HttpResponse<String> resp) throws Exception {
         if (resp.statusCode() == 200) {
-            JsonNode root = mapper().readTree(resp.body());
+            JsonNode root = api.readTree(resp.body());
             JsonNode arr  = root.isArray() ? root : root.path("data");
             arr.forEach(n -> courses.add(new CourseData(
                     n.path("id").asText(),
@@ -211,11 +192,11 @@ public class CourseBean implements Serializable {
 
     private void loadStudentProgress(String courseId) {
         try {
-            HttpResponse<String> resp = http().send(
-                    bearer(COURSE_URL + "/api/v1/courses/" + courseId + "/progress"),
-                    HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    COURSE_URL + "/api/v1/courses/" + courseId + "/progress",
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode n = mapper().readTree(resp.body());
+                JsonNode n = api.readTree(resp.body());
                 completedLessons = (int) n.path("completedCount").asLong();
                 totalLessons     = (int) n.path("totalLessons").asLong();
                 progressPct      = n.path("progressPct").asDouble();
@@ -256,8 +237,8 @@ public class CourseBean implements Serializable {
         }
 
         for (int i = 1; i < modules.size(); i++) {
-            ModuleData prev = modules.get(i - 1);
-            ModuleData curr = modules.get(i);
+            ModuleData prev     = modules.get(i - 1);
+            ModuleData curr     = modules.get(i);
             List<String> prevAids = moduleAssessments.get(prev.getId());
             if (prevAids == null || prevAids.isEmpty()) continue;
 
@@ -265,9 +246,9 @@ public class CourseBean implements Serializable {
             try {
                 String url = ASSESSMENT_URL + "/api/v1/submissions/avg-for-assessments"
                         + "?userId=" + userId + "&assessmentIds=" + idsParam;
-                HttpResponse<String> resp = http().send(bearer(url), HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> resp = api.get(url, session.getAccessToken());
                 if (resp.statusCode() == 200) {
-                    double avg = mapper().readTree(resp.body()).path("avgScorePct").asDouble(0);
+                    double avg = api.readTree(resp.body()).path("avgScorePct").asDouble(0);
                     if (avg < 60.0) lockedModuleIds.add(curr.getId());
                 }
             } catch (Exception ignored) {}
@@ -278,7 +259,6 @@ public class CourseBean implements Serializable {
         return lockedModuleIds.contains(moduleId);
     }
 
-    /** Returns true if the student can open this lesson (completed, current, or unlocked supplementary). */
     public boolean isLessonAccessible(String lessonId) {
         if (!session.hasRole("STUDENT")) return true;
         return completedLessonIdsSet.contains(lessonId)
@@ -286,7 +266,6 @@ public class CourseBean implements Serializable {
                || unlockedSupplementaryLessonIds.contains(lessonId);
     }
 
-    /** Checks whether all assessments in this course have avgScorePct >= 60 for this student. */
     private void computeCourseFinishable() {
         if (progressPct < 100.0) return;
         String userId = session.getUserId();
@@ -297,9 +276,9 @@ public class CourseBean implements Serializable {
             try {
                 String url = ASSESSMENT_URL + "/api/v1/submissions/avg-for-assessments"
                         + "?userId=" + userId + "&assessmentIds=" + a.getId();
-                HttpResponse<String> resp = http().send(bearer(url), HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> resp = api.get(url, session.getAccessToken());
                 if (resp.statusCode() != 200) { courseFinishable = false; return; }
-                double avg = mapper().readTree(resp.body()).path("avgScorePct").asDouble(0);
+                double avg = api.readTree(resp.body()).path("avgScorePct").asDouble(0);
                 if (avg < 60.0) { courseFinishable = false; return; }
             } catch (Exception ignored) { courseFinishable = false; return; }
         }
@@ -307,49 +286,35 @@ public class CourseBean implements Serializable {
 
     public boolean isCourseFinishable() { return courseFinishable; }
 
-    /** JSF action: calls POST /enrollments/courses/{id}/finalize and redirects to dashboard. */
     public String finalizeCourse() {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/enrollments/courses/" + selectedCourseId + "/finalize"))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.noBody())
-                    .timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http().send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.postEmpty(
+                    COURSE_URL + "/api/v1/enrollments/courses/" + selectedCourseId + "/finalize",
+                    session.getAccessToken());
             if (resp.statusCode() == 200) return "dashboard?faces-redirect=true";
-            warn("No se pudo finalizar el curso.");
-        } catch (Exception e) { warn("Error al finalizar el curso."); }
+            FacesMessageUtil.warn("No se pudo finalizar el curso.");
+        } catch (Exception e) { FacesMessageUtil.warn("Error al finalizar el curso."); }
         return null;
     }
 
     private void loadEnrolledIds() {
         try {
-            HttpResponse<String> resp = http().send(
-                    bearer(COURSE_URL + "/api/v1/enrollments/my"),
-                    HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(COURSE_URL + "/api/v1/enrollments/my",
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode arr = mapper().readTree(resp.body());
-                arr.forEach(n -> enrolledCourseIds.add(n.path("courseId").asText()));
+                api.readTree(resp.body()).forEach(n -> enrolledCourseIds.add(n.path("courseId").asText()));
             }
         } catch (Exception ignored) {}
     }
 
-    // ---- course detail loading ----
-
     public void loadDetail() {
         if (selectedCourseId == null || selectedCourseId.isBlank()) return;
         try {
-            HttpRequest.Builder builder = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/courses/" + selectedCourseId))
-                    .GET().timeout(Duration.ofSeconds(5));
-            if (session.getAccessToken() != null) {
-                builder.header("Authorization", "Bearer " + session.getAccessToken());
-            }
-            HttpResponse<String> resp = http().send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.getWithOptionalAuth(
+                    COURSE_URL + "/api/v1/courses/" + selectedCourseId, session.getAccessToken());
             if (resp.statusCode() != 200) return;
 
-            JsonNode n = mapper().readTree(resp.body());
+            JsonNode n = api.readTree(resp.body());
             courseDetail = new CourseData(
                     n.path("id").asText(),
                     n.path("title").asText(),
@@ -387,7 +352,7 @@ public class CourseBean implements Serializable {
                 ));
             });
         } catch (Exception e) {
-            warn("No se pudo cargar el detalle del curso.");
+            FacesMessageUtil.warn("No se pudo cargar el detalle del curso.");
         }
     }
 
@@ -396,12 +361,11 @@ public class CourseBean implements Serializable {
         courseAssessments.clear();
         if (session.getAccessToken() == null) return map;
         try {
-            HttpResponse<String> resp = http().send(
-                    bearer(ASSESSMENT_URL + "/api/v1/assessments/course/" + courseId),
-                    HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ASSESSMENT_URL + "/api/v1/assessments/course/" + courseId,
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode arr = mapper().readTree(resp.body());
-                arr.forEach(a -> {
+                api.readTree(resp.body()).forEach(a -> {
                     String lessonId = a.path("lessonId").isMissingNode() || a.path("lessonId").isNull()
                             ? null : a.path("lessonId").asText(null);
                     String aId   = a.path("id").asText();
@@ -420,72 +384,54 @@ public class CourseBean implements Serializable {
         return map;
     }
 
-    // ---- actions ----
-
     public String enroll() {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/enrollments/courses/" + selectedCourseId))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.noBody())
-                    .timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http().send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.postEmpty(
+                    COURSE_URL + "/api/v1/enrollments/courses/" + selectedCourseId,
+                    session.getAccessToken());
             if (resp.statusCode() == 201) return "dashboard?faces-redirect=true";
-            JsonNode err = mapper().readTree(resp.body());
-            warn(err.path("message").asText("No se pudo inscribir."));
+            JsonNode err = api.readTree(resp.body());
+            FacesMessageUtil.warn(err.path("message").asText("No se pudo inscribir."));
         } catch (Exception e) {
-            warn("Error al inscribirse.");
+            FacesMessageUtil.warn("Error al inscribirse.");
         }
-        // Refrescar estado de inscripciones para que el render post-error sea correcto
         loadEnrolledIds();
         return null;
     }
 
     public String createCourse() {
         try {
-            String body = String.format(
-                    "{\"title\":\"%s\",\"description\":\"%s\",\"maxStudents\":%d,\"status\":\"%s\"}",
-                    newTitle != null ? newTitle.replace("\"","\\\"") : "",
-                    newDescription != null ? newDescription.replace("\"","\\\"") : "",
-                    newMaxStudents,
-                    newStatus != null ? newStatus : "DRAFT");
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/courses"))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body))
-                    .timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http().send(req, HttpResponse.BodyHandlers.ofString());
+            Map<String, Object> bodyMap = new HashMap<>();
+            bodyMap.put("title",       newTitle       != null ? newTitle       : "");
+            bodyMap.put("description", newDescription != null ? newDescription : "");
+            bodyMap.put("maxStudents", newMaxStudents);
+            bodyMap.put("status",      newStatus      != null ? newStatus      : "DRAFT");
+            HttpResponse<String> resp = api.post(
+                    COURSE_URL + "/api/v1/courses", api.toJson(bodyMap), session.getAccessToken());
             if (resp.statusCode() == 201) {
-                info("Curso creado exitosamente.");
+                FacesMessageUtil.info("Curso creado exitosamente.");
                 return "courses?faces-redirect=true";
             }
-            JsonNode err = mapper().readTree(resp.body());
-            warn(err.path("message").asText("No se pudo crear el curso."));
+            JsonNode err = api.readTree(resp.body());
+            FacesMessageUtil.warn(err.path("message").asText("No se pudo crear el curso."));
         } catch (Exception e) {
-            warn("Error al crear el curso.");
+            FacesMessageUtil.warn("Error al crear el curso.");
         }
         return null;
     }
 
-    // ---- enrolled / supplementary helpers ----
-
-    public boolean isEnrolled(String courseId) {
-        return enrolledCourseIds.contains(courseId);
-    }
+    public boolean isEnrolled(String courseId) { return enrolledCourseIds.contains(courseId); }
 
     private void loadUnlockedSupplementaryLessons(String courseId) {
         try {
-            HttpResponse<String> resp = http().send(
-                    bearer(ASSESSMENT_URL + "/api/v1/adaptive-rules/unlocked-supplementary?courseId=" + courseId),
-                    HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ASSESSMENT_URL + "/api/v1/adaptive-rules/unlocked-supplementary?courseId=" + courseId,
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode arr = mapper().readTree(resp.body());
-                arr.forEach(id -> unlockedSupplementaryLessonIds.add(id.asText()));
+                api.readTree(resp.body()).forEach(id -> unlockedSupplementaryLessonIds.add(id.asText()));
             }
         } catch (Exception e) {
-            System.err.println("[CourseBean] loadUnlockedSupplementaryLessons error: " + e);
+            LOG.warning("[CourseBean] loadUnlockedSupplementaryLessons error: " + e.getMessage());
         }
     }
 
@@ -493,24 +439,6 @@ public class CourseBean implements Serializable {
         return unlockedSupplementaryLessonIds.contains(lessonId);
     }
 
-    private HttpRequest bearer(String url) {
-        return HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Authorization", "Bearer " + session.getAccessToken())
-                .GET().timeout(Duration.ofSeconds(5)).build();
-    }
-
-    private void warn(String msg) {
-        FacesContext.getCurrentInstance().addMessage(null,
-                new FacesMessage(FacesMessage.SEVERITY_WARN, msg, null));
-    }
-
-    private void info(String msg) {
-        FacesContext.getCurrentInstance().addMessage(null,
-                new FacesMessage(FacesMessage.SEVERITY_INFO, msg, null));
-    }
-
-    // ---- accessors ----
     public double  getProgressPct()              { return Math.round(progressPct * 10.0) / 10.0; }
     public int     getCompletedLessons()         { return completedLessons; }
     public int     getTotalLessons()             { return totalLessons; }

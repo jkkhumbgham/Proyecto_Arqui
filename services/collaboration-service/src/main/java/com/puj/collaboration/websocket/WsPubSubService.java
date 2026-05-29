@@ -88,7 +88,8 @@ public class WsPubSubService {
     void stopSubscriber() {
         running = false;
         if (pubSub != null) {
-            try { pubSub.punsubscribe(); } catch (Exception ignored) {}
+            try { pubSub.punsubscribe(); }
+            catch (Exception e) { LOG.warning("Error cancelando suscripción Redis: " + e.getMessage()); }
         }
         if (subscriberThread != null) subscriberThread.shutdownNow();
     }

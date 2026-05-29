@@ -1,19 +1,15 @@
 package com.puj.ui.bean;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.puj.ui.service.ApiClientService;
+import com.puj.ui.util.FacesMessageUtil;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.RequestScoped;
-import jakarta.faces.application.FacesMessage;
-import jakarta.faces.context.FacesContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
@@ -25,34 +21,34 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Logger;
 
 @Named
 @RequestScoped
 public class AssessmentBean {
 
+    private static final Logger LOG = Logger.getLogger(AssessmentBean.class.getName());
+
     public static class AssessmentData {
         private final String id, title, description, courseId;
         private final double totalPoints;
 
-        // Campos enriquecidos con datos de submissions del estudiante
         private int    maxAttempts     = 3;
         private double passingScorePct = 60.0;
         private int    attemptsUsed    = 0;
-        private double bestScorePct    = -1.0; // -1 = sin intentos previos
+        private double bestScorePct    = -1.0;
 
         public AssessmentData(String id, String title, String description, double totalPoints, String courseId) {
             this.id = id; this.title = title; this.description = description;
             this.totalPoints = totalPoints; this.courseId = courseId;
         }
 
-        // Getters existentes
         public String getId()           { return id; }
         public String getTitle()        { return title; }
         public String getDescription()  { return description; }
         public double getTotalPoints()  { return totalPoints; }
         public String getCourseId()     { return courseId; }
 
-        // Setters y getters nuevos
         public void   setMaxAttempts(int v)        { maxAttempts     = v; }
         public void   setPassingScorePct(double v) { passingScorePct = v; }
         public void   setAttemptsUsed(int v)       { attemptsUsed    = v; }
@@ -63,7 +59,6 @@ public class AssessmentBean {
         public int    getAttemptsUsed()    { return attemptsUsed; }
         public double getBestScorePct()    { return bestScorePct; }
 
-        // Booleanos calculados (EL: #{a.attemptsExhausted}, #{a.hasAttempted}, #{a.bestScorePassing})
         public boolean isAttemptsExhausted() { return attemptsUsed >= maxAttempts; }
         public boolean isHasAttempted()      { return attemptsUsed > 0; }
         public boolean isBestScorePassing()  { return bestScorePct >= passingScorePct; }
@@ -96,12 +91,11 @@ public class AssessmentBean {
         public List<Map<String, String>> getOptions() { return options; }
     }
 
-    // Instructor quiz results
     public static class SubmissionResult {
-        private final String userId, submittedAt;
-        private final double score, maxScore, scorePct;
+        private final String  userId, submittedAt;
+        private final double  score, maxScore, scorePct;
         private final boolean passed;
-        private final int attempt;
+        private final int     attempt;
         public SubmissionResult(String userId, String submittedAt, double score,
                                 double maxScore, double scorePct, boolean passed, int attempt) {
             this.userId = userId; this.submittedAt = submittedAt;
@@ -127,14 +121,12 @@ public class AssessmentBean {
     private static final DateTimeFormatter DATE_FMT =
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.systemDefault());
 
-    @Inject private SessionBean session;
-
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-    private final ObjectMapper mapper = new ObjectMapper();
+    @Inject private SessionBean      session;
+    @Inject private ApiClientService api;
 
     private List<CourseGroup> groups = new ArrayList<>();
 
-    private String  selectedAssessmentId;
+    private String         selectedAssessmentId;
     private AssessmentData assessmentDetail;
     private List<QuestionData> questions = new ArrayList<>();
 
@@ -145,32 +137,27 @@ public class AssessmentBean {
     private String submissionId;
 
     private Map<String, Object> submissionResult;
-    private String adaptiveRecommendation;
-    private String supplementaryLessonId;
+    private String              adaptiveRecommendation;
+    private String              supplementaryLessonId;
     private Map<String, Object> supplementaryLesson;
 
-    // Filter by course (instructor from dashboard)
     private String filteredCourseId;
-
-    // Course to return to when navigating back
     private String backCourseId;
 
-    // Instructor quiz results
-    private String quizResultsTitle;
+    private String              quizResultsTitle;
     private List<SubmissionResult> quizResults = new ArrayList<>();
-    private String selectedAssessmentForResults;
+    private String              selectedAssessmentForResults;
 
     @PostConstruct
     public void load() {
         if (!session.isAuthenticated()) return;
 
-        Map<String, String> params = FacesContext.getCurrentInstance()
+        Map<String, String> params = jakarta.faces.context.FacesContext.getCurrentInstance()
                 .getExternalContext().getRequestParameterMap();
 
-        // Always capture courseId first so it survives the early return below
         String courseIdParam = params.get("courseId");
         if (courseIdParam != null && !courseIdParam.isBlank()) {
-            backCourseId    = courseIdParam;
+            backCourseId     = courseIdParam;
             filteredCourseId = courseIdParam;
         }
 
@@ -182,7 +169,6 @@ public class AssessmentBean {
                 submissionId = submissionIdParam;
             }
             loadDetail();
-            // Derive back-course from the assessment itself when not passed in URL
             if (backCourseId == null && assessmentDetail != null
                     && assessmentDetail.getCourseId() != null
                     && !assessmentDetail.getCourseId().isBlank()) {
@@ -191,7 +177,6 @@ public class AssessmentBean {
             return;
         }
 
-        // Load quiz results if requested (instructor)
         String resultsForParam = params.get("resultsFor");
         if (resultsForParam != null && !resultsForParam.isBlank()
                 && session.hasRole("INSTRUCTOR", "ADMIN")) {
@@ -206,14 +191,12 @@ public class AssessmentBean {
         try {
             if (session.hasRole("INSTRUCTOR", "ADMIN")) {
                 if (filteredCourseId != null) {
-                    // Single course from dashboard link
                     loadCourseGroup(filteredCourseId, null);
                 } else {
-                    // All instructor courses
-                    HttpRequest req = bearer(COURSE_URL + "/api/v1/courses/my");
-                    HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+                    HttpResponse<String> resp = api.get(COURSE_URL + "/api/v1/courses/my",
+                            session.getAccessToken());
                     if (resp.statusCode() == 200) {
-                        JsonNode root = mapper.readTree(resp.body());
+                        JsonNode root = api.readTree(resp.body());
                         JsonNode arr  = root.isArray() ? root : root.path("data");
                         arr.forEach(n -> loadCourseGroup(
                                 n.path("id").asText(),
@@ -221,7 +204,6 @@ public class AssessmentBean {
                     }
                 }
             } else {
-                // Students: enrolled courses
                 Set<String> enrolled = loadEnrolledCourseIds();
                 for (String courseId : enrolled) {
                     loadCourseGroup(courseId, null);
@@ -229,28 +211,27 @@ public class AssessmentBean {
                 enrichWithStudentStats();
             }
         } catch (Exception e) {
-            warn("No se pudo cargar los cursos.");
+            FacesMessageUtil.warn("No se pudo cargar los cursos.");
         }
     }
 
     private void loadCourseGroup(String courseId, String knownTitle) {
         try {
-            // Resolve title when not known (student path or single-course filter)
             String courseTitle = knownTitle;
             if (courseTitle == null || courseTitle.isBlank()) {
-                HttpRequest req = bearer(COURSE_URL + "/api/v1/courses/" + courseId);
-                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> resp = api.get(COURSE_URL + "/api/v1/courses/" + courseId,
+                        session.getAccessToken());
                 courseTitle = (resp.statusCode() == 200)
-                        ? mapper.readTree(resp.body()).path("title").asText("Curso")
+                        ? api.readTree(resp.body()).path("title").asText("Curso")
                         : "Curso " + courseId.substring(0, 8) + "…";
             }
 
-            // Load assessments for this course
             List<AssessmentData> list = new ArrayList<>();
-            HttpRequest req = bearer(ASSESSMENT_URL + "/api/v1/assessments/course/" + courseId);
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ASSESSMENT_URL + "/api/v1/assessments/course/" + courseId,
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                mapper.readTree(resp.body()).forEach(n -> {
+                api.readTree(resp.body()).forEach(n -> {
                     AssessmentData ad = new AssessmentData(
                             n.path("id").asText(),
                             n.path("title").asText(),
@@ -270,32 +251,29 @@ public class AssessmentBean {
     private Set<String> loadEnrolledCourseIds() {
         Set<String> ids = new HashSet<>();
         try {
-            HttpRequest req = bearer(COURSE_URL + "/api/v1/enrollments/my");
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(COURSE_URL + "/api/v1/enrollments/my",
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                mapper.readTree(resp.body())
-                        .forEach(n -> ids.add(n.path("courseId").asText()));
+                api.readTree(resp.body()).forEach(n -> ids.add(n.path("courseId").asText()));
             }
         } catch (Exception ignored) {}
         return ids;
     }
 
-    /** Enriquece cada AssessmentData con la mejor calificación e intentos usados del estudiante. */
     private void enrichWithStudentStats() {
         try {
-            HttpRequest req = bearer(ASSESSMENT_URL + "/api/v1/submissions/my?size=500");
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ASSESSMENT_URL + "/api/v1/submissions/my?size=500", session.getAccessToken());
             if (resp.statusCode() != 200) return;
 
-            // Map<assessmentId, [bestScorePct, maxAttemptNumber]>
             Map<String, double[]> stats = new HashMap<>();
-            mapper.readTree(resp.body()).forEach(s -> {
+            api.readTree(resp.body()).forEach(s -> {
                 String aid = s.path("assessmentId").asText();
                 double pct = s.path("scorePct").asDouble();
                 int    att = s.path("attemptNumber").asInt();
                 double[] cur = stats.computeIfAbsent(aid, k -> new double[]{-1.0, 0.0});
-                if (pct > cur[0]) cur[0] = pct;  // mejor nota
-                if (att > cur[1]) cur[1] = att;  // intentos usados = mayor attemptNumber
+                if (pct > cur[0]) cur[0] = pct;
+                if (att > cur[1]) cur[1] = att;
             });
 
             groups.forEach(grp -> grp.getAssessments().forEach(a -> {
@@ -306,15 +284,15 @@ public class AssessmentBean {
         } catch (Exception ignored) {}
     }
 
-
     public void loadDetail() {
         if (selectedAssessmentId == null) return;
         try {
-            HttpRequest req = bearer(ASSESSMENT_URL + "/api/v1/assessments/" + selectedAssessmentId);
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ASSESSMENT_URL + "/api/v1/assessments/" + selectedAssessmentId,
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode n = mapper.readTree(resp.body());
-                double total = 0;
+                JsonNode n     = api.readTree(resp.body());
+                double   total = 0;
                 for (JsonNode q : n.path("questions")) {
                     total += q.path("points").asDouble();
                 }
@@ -342,16 +320,17 @@ public class AssessmentBean {
                 });
             }
         } catch (Exception e) {
-            warn("No se pudo cargar la evaluación.");
+            FacesMessageUtil.warn("No se pudo cargar la evaluación.");
         }
     }
 
     private void loadQuizResults(String assessmentId) {
         try {
-            HttpRequest req = bearer(ASSESSMENT_URL + "/api/v1/assessments/" + assessmentId + "/submissions");
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ASSESSMENT_URL + "/api/v1/assessments/" + assessmentId + "/submissions",
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode root = mapper.readTree(resp.body());
+                JsonNode root = api.readTree(resp.body());
                 quizResultsTitle = root.path("assessmentTitle").asText("Evaluación");
                 root.path("submissions").forEach(s -> quizResults.add(new SubmissionResult(
                         s.path("userId").asText(),
@@ -364,22 +343,17 @@ public class AssessmentBean {
                 )));
             }
         } catch (Exception e) {
-            warn("No se pudieron cargar los resultados.");
+            FacesMessageUtil.warn("No se pudieron cargar los resultados.");
         }
     }
 
     public String startSubmission() {
         try {
-            String body = String.format("{\"assessmentId\":\"%s\"}", selectedAssessmentId);
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(ASSESSMENT_URL + "/api/v1/submissions"))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body))
-                    .timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            String body = api.toJson(Map.of("assessmentId", selectedAssessmentId));
+            HttpResponse<String> resp = api.post(
+                    ASSESSMENT_URL + "/api/v1/submissions", body, session.getAccessToken());
             if (resp.statusCode() == 201) {
-                submissionId = mapper.readTree(resp.body()).path("id").asText();
+                submissionId = api.readTree(resp.body()).path("id").asText();
                 String redirect = "/views/assessment-take?faces-redirect=true&submissionId=" + submissionId
                         + "&assessmentId=" + selectedAssessmentId;
                 if (backCourseId != null && !backCourseId.isBlank()) {
@@ -388,18 +362,18 @@ public class AssessmentBean {
                 return redirect;
             }
             if (resp.statusCode() == 403) {
-                warn("Solo los estudiantes pueden tomar evaluaciones.");
+                FacesMessageUtil.warn("Solo los estudiantes pueden tomar evaluaciones.");
                 return null;
             }
             try {
                 String msg = resp.body().isBlank() ? "" :
-                        mapper.readTree(resp.body()).path("message").asText("");
-                warn(msg.isBlank() ? "No se pudo iniciar la evaluación." : msg);
+                        api.readTree(resp.body()).path("message").asText("");
+                FacesMessageUtil.warn(msg.isBlank() ? "No se pudo iniciar la evaluación." : msg);
             } catch (Exception ignored) {
-                warn("No se pudo iniciar la evaluación.");
+                FacesMessageUtil.warn("No se pudo iniciar la evaluación.");
             }
         } catch (Exception e) {
-            warn("Error al iniciar la evaluación.");
+            FacesMessageUtil.warn("Error al iniciar la evaluación.");
         }
         return null;
     }
@@ -407,39 +381,37 @@ public class AssessmentBean {
     public String submitAnswers() {
         if (submissionId == null) return null;
         try {
-            ObjectNode answersMap = mapper.createObjectNode();
+            ObjectNode answersMap = api.createObjectNode();
             selectedAnswers.forEach((qId, optId) -> {
                 if (optId != null && !optId.isBlank()) {
-                    answersMap.set(qId, mapper.createArrayNode().add(optId));
+                    answersMap.set(qId, api.createArrayNode().add(optId));
                 }
             });
             selectedMultiAnswers.forEach((qId, optIds) -> {
                 if (optIds != null && optIds.length > 0) {
-                    ArrayNode arr = mapper.createArrayNode();
+                    ArrayNode arr = api.createArrayNode();
                     for (String optId : optIds) arr.add(optId);
                     answersMap.set(qId, arr);
                 }
             });
 
-            ObjectNode bodyNode = mapper.createObjectNode();
+            ObjectNode bodyNode = api.createObjectNode();
             bodyNode.set("answers", answersMap);
             bodyNode.put("durationSeconds", 0L);
-            String body = bodyNode.toString();
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(ASSESSMENT_URL + "/api/v1/submissions/" + submissionId + "/submit"))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body))
-                    .timeout(Duration.ofSeconds(10)).build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+
+            HttpResponse<String> resp = api.post(
+                    ASSESSMENT_URL + "/api/v1/submissions/" + submissionId + "/submit",
+                    bodyNode.toString(), session.getAccessToken(),
+                    Duration.ofSeconds(10));
+
             if (resp.statusCode() == 200) {
-                JsonNode result = mapper.readTree(resp.body());
-                double scorePct = result.path("scorePct").asDouble();
-                long scoreRounded = Math.round(scorePct);
+                JsonNode result     = api.readTree(resp.body());
+                double   scorePct   = result.path("scorePct").asDouble();
+                long     scoreRounded = Math.round(scorePct);
                 this.submissionResult = Map.of(
-                        "score",    scoreRounded,
-                        "passed",   result.path("passed").asBoolean(),
-                        "status",   result.path("status").asText("GRADED")
+                        "score",  scoreRounded,
+                        "passed", result.path("passed").asBoolean(),
+                        "status", result.path("status").asText("GRADED")
                 );
                 JsonNode rec = result.path("recommendation");
                 if (!rec.isNull() && !rec.isMissingNode()) {
@@ -453,9 +425,9 @@ public class AssessmentBean {
                 }
                 return "/views/assessment-result";
             }
-            warn("Error al enviar respuestas.");
+            FacesMessageUtil.warn("Error al enviar respuestas.");
         } catch (Exception e) {
-            warn("Error al enviar: " + e.getClass().getSimpleName()
+            FacesMessageUtil.warn("Error al enviar: " + e.getClass().getSimpleName()
                     + (e.getMessage() != null ? " — " + e.getMessage() : ""));
         }
         return null;
@@ -463,20 +435,18 @@ public class AssessmentBean {
 
     private void loadSupplementaryLesson(String lessonId) {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/lessons/" + lessonId))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-            System.err.println("[AssessmentBean] loadSupplementaryLesson HTTP " + resp.statusCode() + " lessonId=" + lessonId);
+            HttpResponse<String> resp = api.get(COURSE_URL + "/api/v1/lessons/" + lessonId,
+                    session.getAccessToken());
+            LOG.fine("[AssessmentBean] loadSupplementaryLesson HTTP " + resp.statusCode()
+                    + " lessonId=" + lessonId);
             if (resp.statusCode() == 200) {
-                JsonNode n = mapper.readTree(resp.body());
+                JsonNode n = api.readTree(resp.body());
                 supplementaryLesson = new HashMap<>();
                 supplementaryLesson.put("id",    n.path("id").asText());
                 supplementaryLesson.put("title", n.path("title").asText());
             }
         } catch (Exception e) {
-            System.err.println("[AssessmentBean] loadSupplementaryLesson error: " + e);
+            LOG.warning("[AssessmentBean] loadSupplementaryLesson error: " + e.getMessage());
         }
     }
 
@@ -484,10 +454,10 @@ public class AssessmentBean {
         if (userId == null || userId.isBlank()) return "Desconocido";
         return authorNameCache.computeIfAbsent(userId, id -> {
             try {
-                HttpResponse<String> resp = http.send(bearer(USER_URL + "/api/v1/users/" + id + "/name"),
-                        HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> resp = api.get(USER_URL + "/api/v1/users/" + id + "/name",
+                        session.getAccessToken());
                 if (resp.statusCode() == 200) {
-                    return mapper.readTree(resp.body()).path("displayName").asText(id);
+                    return api.readTree(resp.body()).path("displayName").asText(id);
                 }
             } catch (Exception ignored) {}
             return id;
@@ -500,39 +470,26 @@ public class AssessmentBean {
         catch (Exception e) { return iso; }
     }
 
-    private HttpRequest bearer(String url) {
-        return HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Authorization", "Bearer " + session.getAccessToken())
-                .GET().timeout(Duration.ofSeconds(5)).build();
-    }
-
-    private void warn(String msg) {
-        FacesContext.getCurrentInstance().addMessage(null,
-                new FacesMessage(FacesMessage.SEVERITY_WARN, msg, null));
-    }
-
-    // ---- accessors ----
-    public List<CourseGroup>         getGroups()              { return groups; }
-    public boolean                   hasGroups()              { return !groups.isEmpty(); }
-    public AssessmentData            getAssessmentDetail()    { return assessmentDetail; }
-    public List<QuestionData>        getQuestions()           { return questions; }
-    public Map<String, Object>       getSubmissionResult()    { return submissionResult; }
-    public String getAdaptiveRecommendation()                 { return adaptiveRecommendation; }
-    public String getSelectedAssessmentId()                   { return selectedAssessmentId; }
-    public void   setSelectedAssessmentId(String id)         { this.selectedAssessmentId = id; }
-    public String getSubmissionId()                           { return submissionId; }
-    public void   setSubmissionId(String id)                  { this.submissionId = id; }
-    public Map<String, String>   getSelectedAnswers()     { return selectedAnswers; }
-    public Map<String, String[]> getSelectedMultiAnswers(){ return selectedMultiAnswers; }
-    public String                    getSupplementaryLessonId(){ return supplementaryLessonId; }
-    public Map<String, Object>       getSupplementaryLesson() { return supplementaryLesson; }
-    public String            getQuizResultsTitle()            { return quizResultsTitle; }
-    public List<SubmissionResult> getQuizResults()            { return quizResults; }
-    public String getSelectedAssessmentForResults()           { return selectedAssessmentForResults; }
-    public void   setSelectedAssessmentForResults(String id)  { this.selectedAssessmentForResults = id; }
-    public boolean hasQuizResults()                           { return !quizResults.isEmpty(); }
-    public String getFilteredCourseId()                       { return filteredCourseId; }
-    public String getBackCourseId()                           { return backCourseId; }
-    public void   setBackCourseId(String id)                  { this.backCourseId = id; }
+    public List<CourseGroup>      getGroups()              { return groups; }
+    public boolean                hasGroups()              { return !groups.isEmpty(); }
+    public AssessmentData         getAssessmentDetail()    { return assessmentDetail; }
+    public List<QuestionData>     getQuestions()           { return questions; }
+    public Map<String, Object>    getSubmissionResult()    { return submissionResult; }
+    public String getAdaptiveRecommendation()              { return adaptiveRecommendation; }
+    public String getSelectedAssessmentId()                { return selectedAssessmentId; }
+    public void   setSelectedAssessmentId(String id)      { this.selectedAssessmentId = id; }
+    public String getSubmissionId()                        { return submissionId; }
+    public void   setSubmissionId(String id)               { this.submissionId = id; }
+    public Map<String, String>   getSelectedAnswers()      { return selectedAnswers; }
+    public Map<String, String[]> getSelectedMultiAnswers() { return selectedMultiAnswers; }
+    public String                getSupplementaryLessonId(){ return supplementaryLessonId; }
+    public Map<String, Object>   getSupplementaryLesson()  { return supplementaryLesson; }
+    public String            getQuizResultsTitle()         { return quizResultsTitle; }
+    public List<SubmissionResult> getQuizResults()         { return quizResults; }
+    public String getSelectedAssessmentForResults()        { return selectedAssessmentForResults; }
+    public void   setSelectedAssessmentForResults(String id){ this.selectedAssessmentForResults = id; }
+    public boolean hasQuizResults()                        { return !quizResults.isEmpty(); }
+    public String getFilteredCourseId()                    { return filteredCourseId; }
+    public String getBackCourseId()                        { return backCourseId; }
+    public void   setBackCourseId(String id)               { this.backCourseId = id; }
 }

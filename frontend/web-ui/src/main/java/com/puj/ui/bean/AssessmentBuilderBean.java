@@ -1,56 +1,43 @@
 package com.puj.ui.bean;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.puj.ui.service.ApiClientService;
+import com.puj.ui.util.FacesMessageUtil;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.SessionScoped;
-import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
+import jakarta.faces.event.ComponentSystemEvent;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 
-import jakarta.faces.event.ComponentSystemEvent;
-
 import java.io.Serializable;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 @Named
 @SessionScoped
 public class AssessmentBuilderBean implements Serializable {
+
+    private static final long   serialVersionUID = 1L;
+    private static final Logger LOG = Logger.getLogger(AssessmentBuilderBean.class.getName());
 
     private static final String COURSE_URL =
             System.getenv().getOrDefault("COURSE_SERVICE_URL", "http://course-service:8080");
     private static final String ASSESSMENT_URL =
             System.getenv().getOrDefault("ASSESSMENT_SERVICE_URL", "http://assessment-service:8080");
 
-    @Inject private SessionBean session;
-
-    // transient: HttpClient is NOT serializable — lazy-init after deserialization
-    private transient HttpClient http;
-    private transient ObjectMapper mapper;
-
-    private HttpClient http() {
-        if (http == null) http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-        return http;
-    }
-
-    private ObjectMapper mapper() {
-        if (mapper == null) mapper = new ObjectMapper();
-        return mapper;
-    }
+    @Inject private SessionBean      session;
+    @Inject private ApiClientService api;
 
     @PostConstruct
     public void postConstruct() {
-        System.err.println("[AssessmentBuilderBean] Bean created (new instance)");
+        LOG.fine("[AssessmentBuilderBean] Bean created (new instance)");
     }
 
     public static class LessonOption implements Serializable {
@@ -60,26 +47,24 @@ public class AssessmentBuilderBean implements Serializable {
         public String getLabel() { return label; }
     }
 
-    // Assessment metadata
-    private String title;
-    private String description;
-    private String courseId        = "";
-    private String moduleId        = "";
-    private String lessonId        = "";
-    private String editAssessmentId = "";   // non-empty = edit mode
-    private double passingScorePct = 60.0;
-    private int    maxAttempts     = 3;
+    private String  title;
+    private String  description;
+    private String  courseId         = "";
+    private String  moduleId         = "";
+    private String  lessonId         = "";
+    private String  editAssessmentId = "";
+    private double  passingScorePct  = 60.0;
+    private int     maxAttempts      = 3;
 
     private List<LessonOption> lessonOptions              = new ArrayList<>();
     private List<LessonOption> supplementaryLessonOptions = new ArrayList<>();
     private List<QuestionForm> questions                  = new ArrayList<>();
-    private String lastCreatedId;
+    private String             lastCreatedId;
 
-    // Adaptive rule
-    private double  adaptiveThreshold            = 60.0;
-    private String  adaptiveMessage              = "";
+    private double  adaptiveThreshold             = 60.0;
+    private String  adaptiveMessage               = "";
     private String  adaptiveSupplementaryLessonId = "";
-    private String  adaptiveRuleId               = "";
+    private String  adaptiveRuleId                = "";
 
     public static class QuestionForm implements Serializable {
         private String text        = "";
@@ -157,13 +142,11 @@ public class AssessmentBuilderBean implements Serializable {
 
     private void loadAssessmentForEdit(String assessmentId) {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(ASSESSMENT_URL + "/api/v1/assessments/" + assessmentId))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http().send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ASSESSMENT_URL + "/api/v1/assessments/" + assessmentId,
+                    session.getAccessToken());
             if (resp.statusCode() != 200) return;
-            JsonNode n = mapper().readTree(resp.body());
+            JsonNode n = api.readTree(resp.body());
             this.title          = n.path("title").asText("");
             this.description    = n.path("description").asText("");
             this.passingScorePct = n.path("passingScorePct").asDouble(60.0);
@@ -201,25 +184,20 @@ public class AssessmentBuilderBean implements Serializable {
 
             if (!lid.isBlank()) {
                 try {
-                    HttpRequest lr = HttpRequest.newBuilder()
-                            .uri(URI.create(COURSE_URL + "/api/v1/lessons/" + lid))
-                            .header("Authorization", "Bearer " + session.getAccessToken())
-                            .GET().timeout(Duration.ofSeconds(5)).build();
-                    HttpResponse<String> lr2 = http().send(lr, HttpResponse.BodyHandlers.ofString());
-                    if (lr2.statusCode() == 200) {
-                        JsonNode ln = mapper().readTree(lr2.body());
-                        String mid = ln.path("moduleId").asText("");
+                    HttpResponse<String> lr = api.get(COURSE_URL + "/api/v1/lessons/" + lid,
+                            session.getAccessToken());
+                    if (lr.statusCode() == 200) {
+                        JsonNode ln  = api.readTree(lr.body());
+                        String   mid = ln.path("moduleId").asText("");
                         if (!mid.isBlank()) { this.moduleId = mid; loadModuleLessons(courseId, mid); }
                     }
                 } catch (Exception ignored) {}
             }
-            // Always ensure supplementary options are loaded (needed for adaptive rule dropdown)
             if (supplementaryLessonOptions.isEmpty()) loadSupplementaryLessons(courseId);
             loadAdaptiveRule(assessmentId);
-            // JSF validates h:selectOneMenu values against items list — ensure bound values are valid
             sanitizeSelections();
         } catch (Exception e) {
-            System.err.println("[AssessmentBuilderBean] loadAssessmentForEdit error: " + e);
+            LOG.warning("[AssessmentBuilderBean] loadAssessmentForEdit error: " + e.getMessage());
         }
     }
 
@@ -228,32 +206,39 @@ public class AssessmentBuilderBean implements Serializable {
         if (adaptiveSupplementaryLessonId == null) adaptiveSupplementaryLessonId = "";
         if (!lessonId.isBlank()) {
             boolean found = lessonOptions.stream().anyMatch(lo -> lessonId.equals(lo.getId()));
-            if (!found) { System.err.println("[AssessmentBuilderBean] lessonId " + lessonId + " not in lessonOptions — clearing"); lessonId = ""; }
+            if (!found) {
+                LOG.fine("[AssessmentBuilderBean] lessonId " + lessonId
+                        + " not in lessonOptions — clearing");
+                lessonId = "";
+            }
         }
         if (!adaptiveSupplementaryLessonId.isBlank()) {
-            boolean found = supplementaryLessonOptions.stream().anyMatch(lo -> adaptiveSupplementaryLessonId.equals(lo.getId()));
-            if (!found) { System.err.println("[AssessmentBuilderBean] adaptiveSupplementaryLessonId " + adaptiveSupplementaryLessonId + " not in supplementaryLessonOptions — clearing"); adaptiveSupplementaryLessonId = ""; }
+            boolean found = supplementaryLessonOptions.stream()
+                    .anyMatch(lo -> adaptiveSupplementaryLessonId.equals(lo.getId()));
+            if (!found) {
+                LOG.fine("[AssessmentBuilderBean] adaptiveSupplementaryLessonId "
+                        + adaptiveSupplementaryLessonId + " not in supplementaryLessonOptions — clearing");
+                adaptiveSupplementaryLessonId = "";
+            }
         }
     }
 
     private void loadAdaptiveRule(String assessmentId) {
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(ASSESSMENT_URL + "/api/v1/adaptive-rules/assessments/" + assessmentId))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http().send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ASSESSMENT_URL + "/api/v1/adaptive-rules/assessments/" + assessmentId,
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode n = mapper().readTree(resp.body());
+                JsonNode n = api.readTree(resp.body());
                 this.adaptiveRuleId   = n.path("id").asText("");
                 this.adaptiveThreshold = n.path("scoreThresholdPct").asDouble(60.0);
                 this.adaptiveMessage  = n.path("message").isNull() ? "" : n.path("message").asText("");
                 this.adaptiveSupplementaryLessonId = n.path("supplementaryLessonId").isNull()
                         ? "" : n.path("supplementaryLessonId").asText("");
-                System.err.println("[AssessmentBuilderBean] loadAdaptiveRule found rule " + adaptiveRuleId);
+                LOG.fine("[AssessmentBuilderBean] loadAdaptiveRule found rule " + adaptiveRuleId);
             }
         } catch (Exception e) {
-            System.err.println("[AssessmentBuilderBean] loadAdaptiveRule error: " + e);
+            LOG.warning("[AssessmentBuilderBean] loadAdaptiveRule error: " + e.getMessage());
         }
     }
 
@@ -261,7 +246,7 @@ public class AssessmentBuilderBean implements Serializable {
                                    String supLessonId, double threshold,
                                    String message, String existingRuleId) {
         try {
-            ObjectNode body = mapper().createObjectNode();
+            ObjectNode body = api.createObjectNode();
             if (existingRuleId != null && !existingRuleId.isBlank()) body.put("id", existingRuleId);
             body.put("assessmentId",          assessmentId);
             body.put("courseId",              cid);
@@ -270,16 +255,12 @@ public class AssessmentBuilderBean implements Serializable {
             if (message != null && !message.isBlank()) body.put("message", message);
             body.put("active", true);
 
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(ASSESSMENT_URL + "/api/v1/adaptive-rules"))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
-                    .timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http().send(req, HttpResponse.BodyHandlers.ofString());
-            System.err.println("[AssessmentBuilderBean] saveAdaptiveRule HTTP " + resp.statusCode());
+            HttpResponse<String> resp = api.post(
+                    ASSESSMENT_URL + "/api/v1/adaptive-rules",
+                    body.toString(), session.getAccessToken());
+            LOG.fine("[AssessmentBuilderBean] saveAdaptiveRule HTTP " + resp.statusCode());
         } catch (Exception e) {
-            System.err.println("[AssessmentBuilderBean] saveAdaptiveRule error: " + e);
+            LOG.warning("[AssessmentBuilderBean] saveAdaptiveRule error: " + e.getMessage());
         }
     }
 
@@ -288,7 +269,7 @@ public class AssessmentBuilderBean implements Serializable {
     public void initFromRequest() {
         FacesContext ctx = FacesContext.getCurrentInstance();
         if (ctx.isPostback()) {
-            System.err.println("[AssessmentBuilderBean] initFromRequest POSTBACK — courseId='" + courseId
+            LOG.fine("[AssessmentBuilderBean] initFromRequest POSTBACK — courseId='" + courseId
                     + "' title='" + title + "' q=" + questions.size() + " lo=" + lessonOptions.size());
             if (lessonOptions.isEmpty() && !courseId.isBlank() && !moduleId.isBlank())
                 loadModuleLessons(courseId, moduleId);
@@ -296,7 +277,7 @@ public class AssessmentBuilderBean implements Serializable {
                 loadSupplementaryLessons(courseId);
             return;
         }
-        System.err.println("[AssessmentBuilderBean] initFromRequest GET");
+        LOG.fine("[AssessmentBuilderBean] initFromRequest GET");
         reset();
         Map<String, String> params = ctx.getExternalContext().getRequestParameterMap();
         String cid = params.get("courseId");
@@ -339,13 +320,10 @@ public class AssessmentBuilderBean implements Serializable {
         lessonOptions.clear();
         if (courseId == null || courseId.isBlank() || moduleId == null || moduleId.isBlank()) return;
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/courses/" + courseId))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http().send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(COURSE_URL + "/api/v1/courses/" + courseId,
+                    session.getAccessToken());
             if (resp.statusCode() != 200) return;
-            JsonNode course = mapper().readTree(resp.body());
+            JsonNode course = api.readTree(resp.body());
             for (JsonNode m : course.path("modules")) {
                 if (moduleId.equals(m.path("id").asText())) {
                     int idx = 0;
@@ -359,25 +337,22 @@ public class AssessmentBuilderBean implements Serializable {
                     break;
                 }
             }
-            loadSupplementaryLessons(courseId, mapper().readTree(resp.body()));
-            System.err.println("[AssessmentBuilderBean] loadModuleLessons found " + lessonOptions.size() + " lessons");
+            loadSupplementaryLessons(courseId, api.readTree(resp.body()));
+            LOG.fine("[AssessmentBuilderBean] loadModuleLessons found " + lessonOptions.size() + " lessons");
         } catch (Exception e) {
-            System.err.println("[AssessmentBuilderBean] loadModuleLessons error: " + e);
+            LOG.warning("[AssessmentBuilderBean] loadModuleLessons error: " + e.getMessage());
         }
     }
 
     private void loadSupplementaryLessons(String courseId) {
         if (courseId == null || courseId.isBlank()) return;
         try {
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(COURSE_URL + "/api/v1/courses/" + courseId))
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http().send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(COURSE_URL + "/api/v1/courses/" + courseId,
+                    session.getAccessToken());
             if (resp.statusCode() != 200) return;
-            loadSupplementaryLessons(courseId, mapper().readTree(resp.body()));
+            loadSupplementaryLessons(courseId, api.readTree(resp.body()));
         } catch (Exception e) {
-            System.err.println("[AssessmentBuilderBean] loadSupplementaryLessons error: " + e);
+            LOG.warning("[AssessmentBuilderBean] loadSupplementaryLessons error: " + e.getMessage());
         }
     }
 
@@ -395,11 +370,11 @@ public class AssessmentBuilderBean implements Serializable {
                 }
             }
         }
-        System.err.println("[AssessmentBuilderBean] supplementaryLessons found " + supplementaryLessonOptions.size());
+        LOG.fine("[AssessmentBuilderBean] supplementaryLessons found " + supplementaryLessonOptions.size());
     }
 
     public void addQuestion() {
-        System.err.println("[AssessmentBuilderBean] addQuestion — title='" + title + "' q=" + questions.size());
+        LOG.fine("[AssessmentBuilderBean] addQuestion — title='" + title + "' q=" + questions.size());
         questions.add(new QuestionForm());
     }
 
@@ -411,16 +386,16 @@ public class AssessmentBuilderBean implements Serializable {
 
     public String save() {
         if (title == null || title.isBlank()) {
-            warn("El título es obligatorio.");
+            FacesMessageUtil.warn("El título es obligatorio.");
             return null;
         }
         if (courseId == null || courseId.isBlank()) {
-            warn("Debes asociar la evaluación a un curso.");
+            FacesMessageUtil.warn("Debes asociar la evaluación a un curso.");
             return null;
         }
         try {
-            boolean editMode = isEditMode();
-            ObjectNode body = mapper().createObjectNode();
+            boolean    editMode = isEditMode();
+            ObjectNode body     = api.createObjectNode();
             body.put("title", title);
             if (!editMode) body.put("courseId", courseId);
             if (lessonId != null && !lessonId.isBlank()) body.put("lessonId", lessonId);
@@ -458,64 +433,50 @@ public class AssessmentBuilderBean implements Serializable {
                 }
             }
 
-            System.err.println("[AssessmentBuilderBean] save body: " + body.toString().substring(0, Math.min(300, body.toString().length())));
+            LOG.fine("[AssessmentBuilderBean] save body length=" + body.toString().length());
 
-            HttpRequest.Builder rb = HttpRequest.newBuilder()
-                    .header("Authorization", "Bearer " + session.getAccessToken())
-                    .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(10));
+            HttpResponse<String> resp;
             if (editMode) {
-                rb.uri(URI.create(ASSESSMENT_URL + "/api/v1/assessments/" + editAssessmentId))
-                  .PUT(HttpRequest.BodyPublishers.ofString(body.toString()));
+                resp = api.put(ASSESSMENT_URL + "/api/v1/assessments/" + editAssessmentId,
+                        body.toString(), session.getAccessToken(), Duration.ofSeconds(10));
             } else {
-                rb.uri(URI.create(ASSESSMENT_URL + "/api/v1/assessments"))
-                  .POST(HttpRequest.BodyPublishers.ofString(body.toString()));
+                resp = api.post(ASSESSMENT_URL + "/api/v1/assessments",
+                        body.toString(), session.getAccessToken(), Duration.ofSeconds(10));
             }
-            HttpResponse<String> resp = http().send(rb.build(), HttpResponse.BodyHandlers.ofString());
+
             int expected = editMode ? 200 : 201;
-            System.err.println("[AssessmentBuilderBean] save response HTTP " + resp.statusCode() + ": " + resp.body().substring(0, Math.min(200, resp.body().length())));
+            LOG.fine("[AssessmentBuilderBean] save response HTTP " + resp.statusCode());
+
             if (resp.statusCode() == expected) {
                 try {
-                    JsonNode result = mapper().readTree(resp.body());
+                    JsonNode result = api.readTree(resp.body());
                     lastCreatedId = result.path("id").asText();
                 } catch (Exception ignored) {}
-                info(editMode ? "Evaluación actualizada." : "Evaluación creada exitosamente.");
-                // capture everything needed before reset()
-                String cid      = courseId;
-                String aidRule  = editMode ? editAssessmentId : lastCreatedId;
+                FacesMessageUtil.info(editMode ? "Evaluación actualizada." : "Evaluación creada exitosamente.");
+                String  cid     = courseId;
+                String  aidRule = editMode ? editAssessmentId : lastCreatedId;
                 boolean doRule  = !adaptiveSupplementaryLessonId.isBlank()
                         && aidRule != null && !aidRule.isBlank();
-                String supLid   = adaptiveSupplementaryLessonId;
-                double thresh   = adaptiveThreshold;
-                String ruleMsg  = adaptiveMessage;
-                String ruleId   = adaptiveRuleId;
+                String  supLid  = adaptiveSupplementaryLessonId;
+                double  thresh  = adaptiveThreshold;
+                String  ruleMsg = adaptiveMessage;
+                String  ruleId  = adaptiveRuleId;
                 reset();
                 if (doRule) saveAdaptiveRule(aidRule, cid, supLid, thresh, ruleMsg, ruleId);
                 return "/views/course-detail?faces-redirect=true&courseId=" + cid;
             }
             String errMsg = "No se pudo guardar la evaluación. Verifica los datos e intenta de nuevo.";
             try {
-                JsonNode err = mapper().readTree(resp.body());
-                String apiMsg = err.path("message").asText("");
+                String apiMsg = api.readTree(resp.body()).path("message").asText("");
                 if (!apiMsg.isBlank()) errMsg = apiMsg;
             } catch (Exception ignored) {}
-            System.err.println("[AssessmentBuilderBean] save HTTP error " + resp.statusCode() + ": " + resp.body());
-            warn(errMsg);
+            LOG.warning("[AssessmentBuilderBean] save HTTP error " + resp.statusCode());
+            FacesMessageUtil.warn(errMsg);
         } catch (Exception e) {
-            System.err.println("[AssessmentBuilderBean] save exception: " + e);
-            warn("No se pudo guardar la evaluación. Intenta de nuevo.");
+            LOG.warning("[AssessmentBuilderBean] save exception: " + e.getMessage());
+            FacesMessageUtil.warn("No se pudo guardar la evaluación. Intenta de nuevo.");
         }
         return null;
-    }
-
-    private void warn(String msg) {
-        FacesContext.getCurrentInstance().addMessage(null,
-                new FacesMessage(FacesMessage.SEVERITY_WARN, msg, null));
-    }
-
-    private void info(String msg) {
-        FacesContext.getCurrentInstance().addMessage(null,
-                new FacesMessage(FacesMessage.SEVERITY_INFO, msg, null));
     }
 
     public String  getTitle()               { return title; }

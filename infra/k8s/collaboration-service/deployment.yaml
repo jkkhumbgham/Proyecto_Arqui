@@ -65,14 +65,14 @@ spec:
               value: "http://user-service:8080"
           readinessProbe:
             httpGet:
-              path: /api/v1/forums
+              path: /api/v1/health
               port: 8080
             initialDelaySeconds: 60
             periodSeconds: 15
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /api/v1/forums
+              path: /api/v1/health
               port: 8080
             initialDelaySeconds: 120
             periodSeconds: 30

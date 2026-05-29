@@ -1,19 +1,14 @@
 package com.puj.ui.bean;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.puj.ui.service.ApiClientService;
+import com.puj.ui.util.FacesMessageUtil;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.RequestScoped;
-import jakarta.faces.application.FacesMessage;
-import jakarta.faces.context.FacesContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.*;
 
 @Named
@@ -29,10 +24,8 @@ public class DashboardBean {
     private static final String ANALYTICS_URL =
             System.getenv().getOrDefault("ANALYTICS_SERVICE_URL", "http://analytics-service:8080");
 
-    @Inject private SessionBean session;
-
-    private final HttpClient   http   = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-    private final ObjectMapper mapper = new ObjectMapper();
+    @Inject private SessionBean      session;
+    @Inject private ApiClientService api;
 
     // DIRECTOR / ADMIN
     private long   totalUsers;
@@ -43,7 +36,6 @@ public class DashboardBean {
     private List<Map<String, Object>> topCourses    = new ArrayList<>();
     private List<Map<String, Object>> inactiveUsers = new ArrayList<>();
 
-    // Course stats (from course-service) — ADMIN / DIRECTOR
     public static class CourseStatRow {
         private final String courseId, courseTitle;
         private final long   count;
@@ -71,20 +63,20 @@ public class DashboardBean {
             this.status         = status;      this.progressPct    = progressPct;
             this.completedCount = completedCount; this.totalLessons = totalLessons;
         }
-        public String getCourseId()              { return courseId; }
-        public String getTitle()                 { return title; }
-        public String getStatus()                { return status; }
-        public double getProgressPct()           { return progressPct; }
-        public int    getCompletedCount()        { return completedCount; }
-        public int    getTotalLessons()          { return totalLessons; }
-        public String getFirstUncompletedLessonId() { return firstUncompletedLessonId; }
-        public void   setFirstUncompletedLessonId(String id) { this.firstUncompletedLessonId = id; }
-        public boolean isCompleted()             { return "COMPLETED".equals(status); }
+        public String  getCourseId()                 { return courseId; }
+        public String  getTitle()                    { return title; }
+        public String  getStatus()                   { return status; }
+        public double  getProgressPct()              { return progressPct; }
+        public int     getCompletedCount()           { return completedCount; }
+        public int     getTotalLessons()             { return totalLessons; }
+        public String  getFirstUncompletedLessonId() { return firstUncompletedLessonId; }
+        public void    setFirstUncompletedLessonId(String id) { this.firstUncompletedLessonId = id; }
+        public boolean isCompleted()                 { return "COMPLETED".equals(status); }
     }
 
     public static class EvalGrade {
-        private final String assessmentTitle;
-        private final double scorePct;
+        private final String  assessmentTitle;
+        private final double  scorePct;
         private final boolean passed;
         public EvalGrade(String assessmentTitle, double scorePct, boolean passed) {
             this.assessmentTitle = assessmentTitle;
@@ -107,10 +99,10 @@ public class DashboardBean {
             this.avgScorePct = avgScorePct;
             this.evals       = evals;
         }
-        public String         getCourseId()    { return courseId; }
-        public String         getCourseTitle() { return courseTitle; }
-        public double         getAvgScorePct() { return avgScorePct; }
-        public List<EvalGrade> getEvals()      { return evals; }
+        public String          getCourseId()    { return courseId; }
+        public String          getCourseTitle() { return courseTitle; }
+        public double          getAvgScorePct() { return avgScorePct; }
+        public List<EvalGrade> getEvals()       { return evals; }
     }
 
     public static class InstructorCourseMetric {
@@ -136,7 +128,6 @@ public class DashboardBean {
         public List<Map<String, Object>> getModuleDistribution() { return moduleDistribution; }
     }
 
-    // Instructor: their own courses (kept for backwards compat)
     public static class MyCourse {
         private final String id, title, status;
         private final int    maxStudents;
@@ -149,11 +140,11 @@ public class DashboardBean {
         public int    getMaxStudents() { return maxStudents; }
     }
 
-    private List<EnrolledCourse>        enrolledCourses       = new ArrayList<>();
-    private List<MyCourse>              instructorCourses     = new ArrayList<>();
-    private List<StudentCourseStats>    studentGrades         = new ArrayList<>();
-    private List<InstructorCourseMetric> instructorMetrics   = new ArrayList<>();
-    private long                        uniqueInstructorStudents = 0;
+    private List<EnrolledCourse>         enrolledCourses        = new ArrayList<>();
+    private List<MyCourse>               instructorCourses      = new ArrayList<>();
+    private List<StudentCourseStats>     studentGrades          = new ArrayList<>();
+    private List<InstructorCourseMetric> instructorMetrics      = new ArrayList<>();
+    private long                         uniqueInstructorStudents = 0;
 
     @PostConstruct
     public void load() {
@@ -174,10 +165,10 @@ public class DashboardBean {
 
     private void loadSummary() {
         try {
-            HttpRequest req = bearer(ANALYTICS_URL + "/api/v1/analytics/dashboard/summary");
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ANALYTICS_URL + "/api/v1/analytics/dashboard/summary", session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode n = mapper.readTree(resp.body());
+                JsonNode n = api.readTree(resp.body());
                 totalUsers       = n.path("totalUsers").asLong();
                 totalEnrollments = n.path("totalEnrollments").asLong();
                 avgScore         = n.path("averageScore").asDouble();
@@ -189,11 +180,10 @@ public class DashboardBean {
 
     private void loadTopCourses() {
         try {
-            HttpRequest req = bearer(ANALYTICS_URL + "/api/v1/analytics/dashboard/top-courses");
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ANALYTICS_URL + "/api/v1/analytics/dashboard/top-courses", session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode arr = mapper.readTree(resp.body());
-                arr.forEach(n -> {
+                api.readTree(resp.body()).forEach(n -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("title",       n.path("courseTitle").asText());
                     m.put("enrollments", n.path("totalEnrollments").asLong());
@@ -208,14 +198,13 @@ public class DashboardBean {
         try {
             // Datos vienen de analytics-service (alimentado por eventos RabbitMQ),
             // no de user-service directamente.
-            HttpRequest req = bearer(ANALYTICS_URL + "/api/v1/analytics/dashboard/inactive-users?days=30&size=50");
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ANALYTICS_URL + "/api/v1/analytics/dashboard/inactive-users?days=30&size=50",
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode arr = mapper.readTree(resp.body());
-                arr.forEach(n -> {
+                api.readTree(resp.body()).forEach(n -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("email",       n.path("email").asText());
-                    // studentName puede ser "FirstName LastName" o solo nombre
                     String fullName = n.path("studentName").asText("");
                     String[] parts  = fullName.split(" ", 2);
                     m.put("firstName",   parts.length > 0 ? parts[0] : "");
@@ -230,32 +219,29 @@ public class DashboardBean {
 
     private void loadCourseStats() {
         try {
-            HttpRequest req = bearer(COURSE_URL + "/api/v1/enrollments/admin/course-stats?limit=5");
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    COURSE_URL + "/api/v1/enrollments/admin/course-stats?limit=5",
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode root = mapper.readTree(resp.body());
+                JsonNode root = api.readTree(resp.body());
                 totalCompletedEnrollments = root.path("totalCompletedEnrollments").asLong(0);
                 root.path("popularCourses").forEach(n -> popularCourseStats.add(
-                        new CourseStatRow(
-                                n.path("courseId").asText(),
-                                n.path("courseTitle").asText(),
-                                n.path("enrollCount").asLong(0))));
+                        new CourseStatRow(n.path("courseId").asText(),
+                                n.path("courseTitle").asText(), n.path("enrollCount").asLong(0))));
                 root.path("completedCourses").forEach(n -> completedCourseStats.add(
-                        new CourseStatRow(
-                                n.path("courseId").asText(),
-                                n.path("courseTitle").asText(),
-                                n.path("completedCount").asLong(0))));
+                        new CourseStatRow(n.path("courseId").asText(),
+                                n.path("courseTitle").asText(), n.path("completedCount").asLong(0))));
             }
         } catch (Exception ignored) {}
     }
 
     private void loadEnrolledCourses() {
         try {
-            HttpRequest req = bearer(COURSE_URL + "/api/v1/enrollments/my");
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(COURSE_URL + "/api/v1/enrollments/my",
+                    session.getAccessToken());
             if (resp.statusCode() != 200) return;
 
-            JsonNode enrollments = mapper.readTree(resp.body());
+            JsonNode enrollments = api.readTree(resp.body());
             enrollments.forEach(n -> {
                 String cid    = n.path("courseId").asText();
                 double pct    = n.path("progressPct").asDouble();
@@ -264,10 +250,11 @@ public class DashboardBean {
                 int completedCount = 0, totalLessons = 0;
                 Set<String> completedIds = new HashSet<>();
                 try {
-                    HttpRequest pReq = bearer(COURSE_URL + "/api/v1/courses/" + cid + "/progress");
-                    HttpResponse<String> pResp = http.send(pReq, HttpResponse.BodyHandlers.ofString());
+                    HttpResponse<String> pResp = api.get(
+                            COURSE_URL + "/api/v1/courses/" + cid + "/progress",
+                            session.getAccessToken());
                     if (pResp.statusCode() == 200) {
-                        JsonNode p = mapper.readTree(pResp.body());
+                        JsonNode p = api.readTree(pResp.body());
                         completedCount = (int) p.path("completedCount").asLong();
                         totalLessons   = (int) p.path("totalLessons").asLong();
                         pct            = p.path("progressPct").asDouble();
@@ -279,10 +266,10 @@ public class DashboardBean {
                         cid, n.path("courseTitle").asText(), status, pct, completedCount, totalLessons);
 
                 try {
-                    HttpRequest cReq = bearer(COURSE_URL + "/api/v1/courses/" + cid);
-                    HttpResponse<String> cResp = http.send(cReq, HttpResponse.BodyHandlers.ofString());
+                    HttpResponse<String> cResp = api.get(
+                            COURSE_URL + "/api/v1/courses/" + cid, session.getAccessToken());
                     if (cResp.statusCode() == 200) {
-                        JsonNode course = mapper.readTree(cResp.body());
+                        JsonNode course = api.readTree(cResp.body());
                         outer:
                         for (JsonNode m : course.path("modules")) {
                             for (JsonNode l : m.path("lessons")) {
@@ -299,7 +286,7 @@ public class DashboardBean {
                 enrolledCourses.add(ec);
             });
         } catch (Exception e) {
-            warn("No se pudo cargar tus cursos.");
+            FacesMessageUtil.warn("No se pudo cargar tus cursos.");
         }
     }
 
@@ -312,12 +299,11 @@ public class DashboardBean {
 
     private void loadStudentGrades() {
         try {
-            HttpRequest req = bearer(ASSESSMENT_URL + "/api/v1/submissions/my?size=200");
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(
+                    ASSESSMENT_URL + "/api/v1/submissions/my?size=200", session.getAccessToken());
             if (resp.statusCode() != 200) return;
 
-            JsonNode arr = mapper.readTree(resp.body());
-            // Group by courseId; keep best (highest scorePct) attempt per assessmentId
+            JsonNode arr = api.readTree(resp.body());
             Map<String, String>                  courseTitles = new LinkedHashMap<>();
             Map<String, Map<String, BestAttempt>> best        = new LinkedHashMap<>();
 
@@ -336,12 +322,11 @@ public class DashboardBean {
                 }
             });
 
-            // Enrich course titles from already-loaded enrolledCourses
             enrolledCourses.forEach(ec -> courseTitles.put(ec.getCourseId(), ec.getTitle()));
 
             best.forEach((cid, assessments) -> {
-                List<EvalGrade> grades  = new ArrayList<>();
-                double          total   = 0;
+                List<EvalGrade> grades = new ArrayList<>();
+                double          total  = 0;
                 for (BestAttempt ba : assessments.values()) {
                     grades.add(new EvalGrade(ba.title, ba.scorePct, ba.passed));
                     total += ba.scorePct;
@@ -355,10 +340,10 @@ public class DashboardBean {
 
     private void loadInstructorCourses() {
         try {
-            HttpRequest req = bearer(COURSE_URL + "/api/v1/courses/my");
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.get(COURSE_URL + "/api/v1/courses/my",
+                    session.getAccessToken());
             if (resp.statusCode() == 200) {
-                JsonNode root = mapper.readTree(resp.body());
+                JsonNode root = api.readTree(resp.body());
                 JsonNode arr  = root.isArray() ? root : root.path("data");
                 arr.forEach(n -> instructorCourses.add(new MyCourse(
                         n.path("id").asText(), n.path("title").asText(),
@@ -366,7 +351,7 @@ public class DashboardBean {
                 )));
             }
         } catch (Exception e) {
-            warn("No se pudo cargar tus cursos.");
+            FacesMessageUtil.warn("No se pudo cargar tus cursos.");
         }
     }
 
@@ -379,19 +364,20 @@ public class DashboardBean {
             List<Map<String, Object>> modules = new ArrayList<>();
 
             try {
-                HttpRequest req = bearer(ANALYTICS_URL + "/api/v1/analytics/courses/" + cid + "/summary");
-                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> resp = api.get(
+                        ANALYTICS_URL + "/api/v1/analytics/courses/" + cid + "/summary",
+                        session.getAccessToken());
                 if (resp.statusCode() == 200) {
-                    JsonNode n = mapper.readTree(resp.body());
-                    avgGrade = n.path("averageScore").asDouble();
+                    avgGrade = api.readTree(resp.body()).path("averageScore").asDouble();
                 }
             } catch (Exception ignored) {}
 
             try {
-                HttpRequest req = bearer(COURSE_URL + "/api/v1/enrollments/course/" + cid + "/stats");
-                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> resp = api.get(
+                        COURSE_URL + "/api/v1/enrollments/course/" + cid + "/stats",
+                        session.getAccessToken());
                 if (resp.statusCode() == 200) {
-                    JsonNode n = mapper.readTree(resp.body());
+                    JsonNode n = api.readTree(resp.body());
                     enrolled    = n.path("enrolledCount").asLong();
                     avgProgress = n.path("avgProgressPct").asDouble();
                     n.path("moduleDistribution").forEach(m -> {
@@ -407,31 +393,19 @@ public class DashboardBean {
                     cid, mc.getTitle(), avgGrade, enrolled, avgProgress, modules));
         }
 
-        // Unique students across all instructor courses (deduplicated)
         if (!instructorCourses.isEmpty()) {
             String ids = instructorCourses.stream()
                     .map(MyCourse::getId)
                     .collect(java.util.stream.Collectors.joining(","));
             try {
-                HttpRequest req = bearer(COURSE_URL + "/api/v1/enrollments/unique-students?courseIds=" + ids);
-                HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> resp = api.get(
+                        COURSE_URL + "/api/v1/enrollments/unique-students?courseIds=" + ids,
+                        session.getAccessToken());
                 if (resp.statusCode() == 200) {
-                    uniqueInstructorStudents = mapper.readTree(resp.body()).path("uniqueStudents").asLong();
+                    uniqueInstructorStudents = api.readTree(resp.body()).path("uniqueStudents").asLong();
                 }
             } catch (Exception ignored) {}
         }
-    }
-
-    private HttpRequest bearer(String url) {
-        return HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Authorization", "Bearer " + session.getAccessToken())
-                .GET().timeout(Duration.ofSeconds(5)).build();
-    }
-
-    private void warn(String msg) {
-        FacesContext.getCurrentInstance().addMessage(null,
-                new FacesMessage(FacesMessage.SEVERITY_WARN, msg, null));
     }
 
     public List<Map<String, Object>> getMyCourses() {
@@ -443,17 +417,12 @@ public class DashboardBean {
         return list;
     }
 
-    // Aggregate stats for instructor dashboard
-    public long getTotalInstructorStudents() {
-        return uniqueInstructorStudents;
+    public long getTotalInstructorStudents() { return uniqueInstructorStudents; }
+
+    public long getActiveInstructorCourseCount() {
+        return instructorCourses.stream().filter(c -> "PUBLISHED".equals(c.getStatus())).count();
     }
 
-    /** Cursos del instructor con status PUBLISHED (los que realmente están activos). */
-    public long getActiveInstructorCourseCount() {
-        return instructorCourses.stream()
-                .filter(c -> "PUBLISHED".equals(c.getStatus()))
-                .count();
-    }
     public double getAvgInstructorGrade() {
         return instructorMetrics.isEmpty() ? 0 :
                 instructorMetrics.stream().mapToDouble(InstructorCourseMetric::getAvgGradePct)
@@ -465,13 +434,13 @@ public class DashboardBean {
     public long   getTotalCourses()     { return totalCourses; }
     public double getAvgScore()         { return avgScore; }
     public double getOverallPassRate()  { return overallPassRate; }
-    public List<Map<String, Object>>    getTopCourses()        { return topCourses; }
-    public List<Map<String, Object>>    getInactiveUsers()     { return inactiveUsers; }
-    public long                getTotalCompletedEnrollments() { return totalCompletedEnrollments; }
-    public List<CourseStatRow> getPopularCourseStats()        { return popularCourseStats; }
-    public List<CourseStatRow> getCompletedCourseStats()      { return completedCourseStats; }
-    public List<EnrolledCourse>         getEnrolledCourses()   { return enrolledCourses; }
-    public List<MyCourse>               getInstructorCourses() { return instructorCourses; }
-    public List<StudentCourseStats>     getStudentGrades()     { return studentGrades; }
-    public List<InstructorCourseMetric> getInstructorMetrics() { return instructorMetrics; }
+    public List<Map<String, Object>>    getTopCourses()               { return topCourses; }
+    public List<Map<String, Object>>    getInactiveUsers()            { return inactiveUsers; }
+    public long                getTotalCompletedEnrollments()         { return totalCompletedEnrollments; }
+    public List<CourseStatRow> getPopularCourseStats()                { return popularCourseStats; }
+    public List<CourseStatRow> getCompletedCourseStats()              { return completedCourseStats; }
+    public List<EnrolledCourse>         getEnrolledCourses()          { return enrolledCourses; }
+    public List<MyCourse>               getInstructorCourses()        { return instructorCourses; }
+    public List<StudentCourseStats>     getStudentGrades()            { return studentGrades; }
+    public List<InstructorCourseMetric> getInstructorMetrics()        { return instructorMetrics; }
 }
