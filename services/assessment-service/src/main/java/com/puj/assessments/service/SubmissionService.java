@@ -42,14 +42,21 @@ public class SubmissionService {
             submission.setAnswersJson("{}");
         }
 
+        // Use server-measured duration; cap at time limit if configured (RNF RF-08)
+        Instant now = Instant.now();
+        long actualSeconds = now.getEpochSecond() - submission.getStartedAt().getEpochSecond();
+        if (assessment.getTimeLimitMinutes() != null) {
+            actualSeconds = Math.min(actualSeconds, assessment.getTimeLimitMinutes() * 60L);
+        }
+
         GradeResult grade = grade(assessment, req.answers());
         submission.setScore(grade.score());
         submission.setMaxScore(grade.maxScore());
         submission.setPassed(grade.passed());
         submission.setStatus(SubmissionStatus.GRADED);
-        submission.setSubmittedAt(Instant.now());
-        submission.setDurationSeconds(req.durationSeconds());
-        submission.setGradedAt(Instant.now());
+        submission.setSubmittedAt(now);
+        submission.setDurationSeconds(actualSeconds);
+        submission.setGradedAt(now);
         submissionRepo.save(submission);
 
         boolean allPassed = computeAllAssessmentsPassed(submission.getUserId(), assessment.getCourseId());

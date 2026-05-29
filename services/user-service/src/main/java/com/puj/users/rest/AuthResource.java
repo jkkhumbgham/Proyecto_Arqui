@@ -58,12 +58,13 @@ public class AuthResource {
     @POST
     @Path("/logout")
     @Operation(summary = "Cerrar sesión")
-    public Response logout() {
+    public Response logout(@Context HttpHeaders headers) {
         if (!authenticatedUser.isAuthenticated()) {
             return Response.noContent().build();
         }
         JwtClaims claims = jwtProvider.validateToken(authenticatedUser.getRawToken());
-        authService.logout(claims);
+        String ip = headers.getHeaderString("X-Forwarded-For");
+        authService.logout(claims, ip);
         return Response.noContent().build();
     }
 

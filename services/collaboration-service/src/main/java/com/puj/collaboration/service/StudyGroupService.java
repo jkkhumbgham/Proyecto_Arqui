@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.puj.collaboration.entity.GroupMember;
 import com.puj.collaboration.entity.StudyGroup;
 import com.puj.collaboration.repository.StudyGroupRepository;
+import com.puj.collaboration.resilience.CircuitBreaker;
 import com.puj.security.rbac.AuthenticatedUser;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -32,7 +33,8 @@ public class StudyGroupService {
             System.getenv().getOrDefault("ASSESSMENT_SERVICE_URL", "http://assessment-service:8080");
 
     @Inject private StudyGroupRepository repo;
-    @Inject private AuthenticatedUser     currentUser;
+    @Inject private AuthenticatedUser    currentUser;
+    @Inject private CircuitBreaker       assessmentCircuitBreaker;
 
     private final HttpClient   http   = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
     private final ObjectMapper mapper = new ObjectMapper();
@@ -106,9 +108,15 @@ public class StudyGroupService {
 
     /**
      * Elects the member with the highest avg score across all course assessments as tutor.
-     * Failure is non-fatal.
+     * Failure is non-fatal. Circuit Breaker (RNF-04b) prevents cascading timeouts
+     * when assessment-service is unavailable.
      */
     private void tryAssignTutor(StudyGroup group, UUID ignoredUserId) {
+        if (!assessmentCircuitBreaker.allowRequest()) {
+            LOG.warning("[CircuitBreaker] Assessment-service unavailable — skipping tutor election for group "
+                    + group.getId());
+            return;
+        }
         try {
             // 1. Get assessment IDs for this course
             HttpRequest assessReq = HttpRequest.newBuilder()
@@ -116,20 +124,26 @@ public class StudyGroupService {
                     .header("Authorization", "Bearer " + currentUser.getRawToken())
                     .GET().timeout(Duration.ofSeconds(3)).build();
             HttpResponse<String> assessResp = http.send(assessReq, HttpResponse.BodyHandlers.ofString());
-            if (assessResp.statusCode() != 200) return;
+            if (assessResp.statusCode() != 200) {
+                assessmentCircuitBreaker.recordFailure();
+                return;
+            }
 
             List<String> ids = new ArrayList<>();
             mapper.readTree(assessResp.body()).forEach(n -> {
                 String id = n.path("id").asText();
                 if (!id.isBlank()) ids.add(id);
             });
-            if (ids.isEmpty()) return;
+            if (ids.isEmpty()) {
+                assessmentCircuitBreaker.recordSuccess();
+                return;
+            }
             String assessmentIds = String.join(",", ids);
 
             // 2. Score each active member
             List<GroupMember> members = repo.findActiveMembers(group.getId());
-            UUID bestMember = null;
-            double bestScore = -1.0;
+            UUID   bestMember = null;
+            double bestScore  = -1.0;
 
             for (GroupMember m : members) {
                 try {
@@ -150,6 +164,8 @@ public class StudyGroupService {
                 } catch (Exception ignored) {}
             }
 
+            assessmentCircuitBreaker.recordSuccess();
+
             // 3. Update isTutor for all members
             if (bestMember != null) {
                 final UUID tutorId = bestMember;
@@ -162,6 +178,7 @@ public class StudyGroupService {
                 }
             }
         } catch (Exception e) {
+            assessmentCircuitBreaker.recordFailure();
             LOG.log(Level.WARNING, "Could not elect tutor for group " + group.getId(), e);
         }
     }

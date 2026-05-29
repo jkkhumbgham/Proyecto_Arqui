@@ -13,20 +13,34 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Path("/health")
+@Produces(MediaType.APPLICATION_JSON)
 public class HealthResource {
 
-    @Inject
-    private RabbitMQConnectionProvider rabbitMQ;
+    @Inject private RabbitMQConnectionProvider rabbitMQ;
 
+    /** Liveness: el proceso está vivo. Nunca verifica dependencias externas. */
     @GET
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response health() {
+    @Path("/live")
+    public Response live() {
+        return Response.ok(Map.of("status", "UP", "service", "course-service")).build();
+    }
+
+    /** Readiness: el servicio está listo para recibir tráfico (dependencias OK). */
+    @GET
+    @Path("/ready")
+    public Response ready() {
         boolean mqOk = rabbitMQ != null && rabbitMQ.isAvailable();
+
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("status",    "UP");
+        body.put("status",    mqOk ? "UP" : "DEGRADED");
         body.put("service",   "course-service");
         body.put("timestamp", Instant.now().toString());
         body.put("rabbitMQ",  mqOk);
-        return Response.ok(body).build();
+
+        return Response.status(mqOk ? 200 : 503).entity(body).build();
     }
+
+    /** Retrocompatibilidad: redirige al endpoint ready. */
+    @GET
+    public Response health() { return ready(); }
 }

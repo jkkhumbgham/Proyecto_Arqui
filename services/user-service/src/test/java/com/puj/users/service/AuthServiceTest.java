@@ -39,6 +39,7 @@ class AuthServiceTest {
     @Mock private JwtProvider            jwtProvider;
     @Mock private TokenBlacklistService  blacklistService;
     @Mock private EventPublisher         eventPublisher;
+    @Mock private AuditService           auditService;
 
     @InjectMocks
     private AuthService authService;
@@ -131,7 +132,7 @@ class AuthServiceTest {
                 Instant.now().plusSeconds(900));
         when(jwtProvider.getRemainingTtlSeconds("jti-123")).thenReturn(500L);
 
-        authService.logout(claims);
+        authService.logout(claims, "127.0.0.1");
 
         verify(blacklistService).blacklist("jti-123", 500L);
         verify(refreshRepo).revokeAllForUser(sampleUser.getId());

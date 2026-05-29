@@ -40,6 +40,7 @@ public class AuthService {
     @Inject private JwtProvider            jwtProvider;
     @Inject private TokenBlacklistService  blacklistService;
     @Inject private EventPublisher         eventPublisher;
+    @Inject private AuditService           auditService;
 
     @Transactional
     public UserResponse register(RegisterRequest req) {
@@ -77,18 +78,25 @@ public class AuthService {
 
     @Transactional
     public LoginResponse login(LoginRequest req, String ipAddress) {
-        User user = userRepo.findByEmail(req.email())
-                .orElseThrow(() -> new NotAuthorizedException("Credenciales inválidas."));
+        User user = userRepo.findByEmail(req.email()).orElse(null);
+        if (user == null) {
+            // Log failed attempt without revealing whether account exists
+            auditService.log(null, "LOGIN_FAILED", req.email(), ipAddress);
+            throw new NotAuthorizedException("Credenciales inválidas.");
+        }
 
         if (!user.isActive() || user.isDeleted()) {
+            auditService.log(user.getId(), "LOGIN_BLOCKED", user.getEmail(), ipAddress);
             throw new NotAuthorizedException("Cuenta inactiva o eliminada.");
         }
         if (user.isLocked()) {
+            auditService.log(user.getId(), "LOGIN_BLOCKED", user.getEmail(), ipAddress);
             throw new NotAuthorizedException("Cuenta bloqueada por intentos fallidos. Intenta en 15 minutos.");
         }
         if (!BCrypt.checkpw(req.password(), user.getPasswordHash())) {
             user.recordFailedLogin();
             userRepo.save(user);
+            auditService.log(user.getId(), "LOGIN_FAILED", user.getEmail(), ipAddress);
             throw new NotAuthorizedException("Credenciales inválidas.");
         }
 
@@ -105,6 +113,8 @@ public class AuthService {
         refreshRepo.save(refresh);
 
         userRepo.save(user);
+
+        auditService.log(user.getId(), "LOGIN_SUCCESS", user.getEmail(), ipAddress);
 
         // Notifica a analytics que el usuario inició sesión (para calcular usuarios inactivos)
         eventPublisher.publishAnalytics(new UserLoggedInEvent(
@@ -141,9 +151,10 @@ public class AuthService {
     }
 
     @Transactional
-    public void logout(JwtClaims claims) {
+    public void logout(JwtClaims claims, String ipAddress) {
         long ttl = jwtProvider.getRemainingTtlSeconds(claims.jti());
         blacklistService.blacklist(claims.jti(), ttl);
         refreshRepo.revokeAllForUser(UUID.fromString(claims.userId()));
+        auditService.log(UUID.fromString(claims.userId()), "LOGOUT", claims.email(), ipAddress);
     }
 }
