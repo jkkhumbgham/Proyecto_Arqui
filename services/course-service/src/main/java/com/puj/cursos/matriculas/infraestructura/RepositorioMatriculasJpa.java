@@ -70,13 +70,15 @@ public class RepositorioMatriculasJpa implements RepositorioMatriculas {
      * {@inheritDoc}
      */
     @Override
-    public List<Matricula> buscarPorUsuario(UUID idUsuario) {
+    public List<Matricula> buscarPorUsuario(UUID idUsuario, int pagina, int cantidad) {
         return em.createQuery(
                         "SELECT m FROM Matricula m"
                         + " WHERE m.idUsuario = :uid AND m.eliminadoEn IS NULL"
                         + " ORDER BY m.matriculadoEn DESC",
                         Matricula.class)
                 .setParameter("uid", idUsuario)
+                .setFirstResult(pagina * cantidad)
+                .setMaxResults(cantidad)
                 .getResultList();
     }
 

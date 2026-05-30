@@ -43,12 +43,15 @@ public class RepositorioForosJpa implements RepositorioForos {
 
     /** {@inheritDoc} */
     @Override
-    public List<Foro> buscarTodos() {
+    public List<Foro> buscarTodos(int pagina, int cantidad) {
         return em.createQuery(
                 "SELECT f FROM Foro f "
                 + "WHERE f.eliminadoEn IS NULL "
                 + "ORDER BY f.creadoEn DESC",
-                Foro.class).getResultList();
+                Foro.class)
+                .setFirstResult(pagina * cantidad)
+                .setMaxResults(cantidad)
+                .getResultList();
     }
 
     /** {@inheritDoc} */

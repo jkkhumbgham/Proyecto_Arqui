@@ -42,17 +42,19 @@ public class RepositorioEvaluacionesJpa implements RepositorioEvaluaciones {
     }
 
     @Override
-    public List<Evaluacion> buscarTodas() {
+    public List<Evaluacion> buscarTodas(int pagina, int cantidad) {
         return em.createQuery(
                 "SELECT e FROM Evaluacion e "
                 + "WHERE e.eliminadoEn IS NULL "
                 + "ORDER BY e.creadoEn",
                 Evaluacion.class)
+                .setFirstResult(pagina * cantidad)
+                .setMaxResults(cantidad)
                 .getResultList();
     }
 
     @Override
-    public List<Evaluacion> buscarPorCurso(UUID idCurso) {
+    public List<Evaluacion> buscarPorCurso(UUID idCurso, int pagina, int cantidad) {
         return em.createQuery(
                 "SELECT e FROM Evaluacion e "
                 + "WHERE e.idCurso = :idCurso "
@@ -60,11 +62,13 @@ public class RepositorioEvaluacionesJpa implements RepositorioEvaluaciones {
                 + "ORDER BY e.creadoEn",
                 Evaluacion.class)
                 .setParameter("idCurso", idCurso)
+                .setFirstResult(pagina * cantidad)
+                .setMaxResults(cantidad)
                 .getResultList();
     }
 
     @Override
-    public List<Evaluacion> buscarPorInstructor(UUID idInstructor) {
+    public List<Evaluacion> buscarPorInstructor(UUID idInstructor, int pagina, int cantidad) {
         return em.createQuery(
                 "SELECT e FROM Evaluacion e "
                 + "WHERE e.idInstructor = :idInstructor "
@@ -72,6 +76,8 @@ public class RepositorioEvaluacionesJpa implements RepositorioEvaluaciones {
                 + "ORDER BY e.creadoEn",
                 Evaluacion.class)
                 .setParameter("idInstructor", idInstructor)
+                .setFirstResult(pagina * cantidad)
+                .setMaxResults(cantidad)
                 .getResultList();
     }
 

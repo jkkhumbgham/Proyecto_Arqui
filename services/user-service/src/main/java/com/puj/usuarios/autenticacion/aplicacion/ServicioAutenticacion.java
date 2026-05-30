@@ -57,12 +57,14 @@ public class ServicioAutenticacion {
             Long.parseLong(System.getenv()
                     .getOrDefault("JWT_REFRESH_TTL_SECONDS", "604800"));
 
-    @Inject private RepositorioUsuarios repositorioUsuarios;
-    @Inject private RepositorioTokens   repositorioTokens;
-    @Inject private ProveedorJwt        proveedorJwt;
-    @Inject private ServicioListaNegra  servicioListaNegra;
-    @Inject private PublicadorEventos   publicadorEventos;
-    @Inject private ServicioAuditoria   servicioAuditoria;
+    @Inject private RepositorioUsuarios  repositorioUsuarios;
+    @Inject private RepositorioTokens    repositorioTokens;
+    @Inject private ProveedorJwt         proveedorJwt;
+    @Inject private ServicioListaNegra   servicioListaNegra;
+    @Inject private PublicadorEventos    publicadorEventos;
+    @Inject private ServicioAuditoria    servicioAuditoria;
+    // Self-injection: permite llamar métodos @Transactional a través del proxy CDI
+    @Inject private ServicioAutenticacion self;
 
     // =========================================================================
     // API pública
@@ -77,12 +79,18 @@ public class ServicioAutenticacion {
      * @throws BadRequestException si el consentimiento no fue otorgado o si el
      *                             correo electrónico ya está registrado.
      */
-    @Transactional
     public RespuestaUsuario registrar(SolicitudRegistro solicitud) {
+        RespuestaUsuario respuesta = self.persistirRegistro(solicitud);
+        publicarEventosRegistro(respuesta);
+        return respuesta;
+    }
+
+    /** Parte transaccional del registro — solo operaciones de BD. */
+    @Transactional
+    public RespuestaUsuario persistirRegistro(SolicitudRegistro solicitud) {
         validarPrecondicionesRegistro(solicitud);
         Usuario usuario = construirNuevoUsuario(solicitud);
         repositorioUsuarios.guardar(usuario);
-        publicarEventosRegistro(usuario);
         return RespuestaUsuario.desde(usuario);
     }
 
@@ -99,16 +107,22 @@ public class ServicioAutenticacion {
      * @throws NotAuthorizedException si las credenciales son inválidas o la
      *                                cuenta está bloqueada o inactiva.
      */
-    @Transactional
     public RespuestaLogin iniciarSesion(SolicitudLogin solicitud, String direccionIp) {
+        RespuestaLogin respuesta = self.persistirSesion(solicitud, direccionIp);
+        publicarEventoAcceso(respuesta);
+        return respuesta;
+    }
+
+    /** Parte transaccional del login — BD + auditoría, sin RabbitMQ. */
+    @Transactional
+    public RespuestaLogin persistirSesion(SolicitudLogin solicitud, String direccionIp) {
         Usuario usuario = resolverUsuarioActivo(solicitud, direccionIp);
         verificarContrasena(solicitud, usuario, direccionIp);
         usuario.registrarAccesoExitoso();
-        String tokenAcceso      = emitirTokenAcceso(usuario);
-        String[] idYValorRaw    = crearTokenRefresh(usuario);
+        String tokenAcceso   = emitirTokenAcceso(usuario);
+        String[] idYValorRaw = crearTokenRefresh(usuario);
         repositorioUsuarios.guardar(usuario);
         servicioAuditoria.registrar(usuario.getId(), "LOGIN_SUCCESS", usuario.obtenerCorreo(), direccionIp);
-        publicarEventoAcceso(usuario);
         return construirRespuestaLogin(tokenAcceso, idYValorRaw, usuario);
     }
 
@@ -143,11 +157,19 @@ public class ServicioAutenticacion {
         }
 
         Usuario usuario = almacenado.obtenerUsuario();
+
+        // Revocar el refresh token usado (no puede reusarse — refresh token rotation)
+        almacenado.revocar();
+        repositorioTokens.sincronizar(almacenado);
+
+        // Emitir par fresco
         String nuevoAcceso = proveedorJwt.generarTokenAcceso(
                 usuario.getId().toString(), usuario.obtenerCorreo(), usuario.obtenerRol().name(),
                 Duration.ofSeconds(TTL_ACCESO_SEGUNDOS));
+        String[] nuevoRefresh = crearTokenRefresh(usuario);
 
-        return RespuestaLogin.de(nuevoAcceso, valorTokenRefresh,
+        return RespuestaLogin.de(nuevoAcceso,
+                nuevoRefresh[0] + ":" + nuevoRefresh[1],
                 TTL_ACCESO_SEGUNDOS, RespuestaUsuario.desde(usuario));
     }
 
@@ -212,16 +234,16 @@ public class ServicioAutenticacion {
      *
      * @param usuario usuario recién persistido.
      */
-    private void publicarEventosRegistro(Usuario usuario) {
+    private void publicarEventosRegistro(RespuestaUsuario respuesta) {
         publicadorEventos.publicarAnaliticas(new EventoUsuarioRegistrado(
-                usuario.getId().toString(), usuario.obtenerCorreo(),
-                usuario.obtenerNombre(), usuario.obtenerApellido(),
-                usuario.obtenerRol().name()));
+                respuesta.id().toString(), respuesta.email(),
+                respuesta.nombre(), respuesta.apellido(),
+                respuesta.rol().name()));
 
         publicadorEventos.publicarCorreo(new EventoNotificacionCorreo(
-                usuario.obtenerCorreo(), usuario.obtenerNombre(),
+                respuesta.email(), respuesta.nombre(),
                 EventoNotificacionCorreo.TipoCorreo.WELCOME,
-                Map.of("firstName", usuario.obtenerNombre())));
+                Map.of("firstName", respuesta.nombre())));
     }
 
     // =========================================================================
@@ -326,8 +348,10 @@ public class ServicioAutenticacion {
      *
      * @param usuario usuario que completó el inicio de sesión.
      */
-    private void publicarEventoAcceso(Usuario usuario) {
+    private void publicarEventoAcceso(RespuestaLogin respuesta) {
         publicadorEventos.publicarAnaliticas(new EventoUsuarioConectado(
-                usuario.getId().toString(), usuario.obtenerCorreo(), usuario.obtenerRol().name()));
+                respuesta.usuario().id().toString(),
+                respuesta.usuario().email(),
+                respuesta.usuario().rol().name()));
     }
 }

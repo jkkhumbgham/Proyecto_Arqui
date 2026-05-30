@@ -41,12 +41,14 @@ public interface RepositorioMatriculas {
     Optional<Matricula> buscarPorUsuarioYCurso(UUID idUsuario, UUID idCurso);
 
     /**
-     * Devuelve todas las matrículas activas de un usuario.
+     * Devuelve matrículas activas de un usuario con paginación.
      *
      * @param  idUsuario identificador del estudiante
-     * @return lista de matrículas del estudiante
+     * @param  pagina    número de página (base 0)
+     * @param  cantidad  máximo de resultados
+     * @return lista paginada de matrículas del estudiante
      */
-    List<Matricula> buscarPorUsuario(UUID idUsuario);
+    List<Matricula> buscarPorUsuario(UUID idUsuario, int pagina, int cantidad);
 
     /**
      * Verifica si un usuario ya está matriculado en un curso.

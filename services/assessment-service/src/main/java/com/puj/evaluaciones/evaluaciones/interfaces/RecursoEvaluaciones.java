@@ -62,8 +62,10 @@ public class RecursoEvaluaciones {
     @Transactional
     @RequiereRol({Rol.STUDENT, Rol.INSTRUCTOR, Rol.ADMIN, Rol.DIRECTOR})
     @Operation(summary = "Listar todas las evaluaciones activas")
-    public Response buscarTodas() {
-        List<ResumenEvaluacion> resumenes = repoEvaluaciones.buscarTodas()
+    public Response buscarTodas(
+            @QueryParam("pagina")   @DefaultValue("0")  int pagina,
+            @QueryParam("cantidad") @DefaultValue("20") int cantidad) {
+        List<ResumenEvaluacion> resumenes = repoEvaluaciones.buscarTodas(pagina, Math.min(cantidad, 100))
                 .stream()
                 .map(ResumenEvaluacion::from)
                 .toList();
@@ -80,9 +82,12 @@ public class RecursoEvaluaciones {
     @Transactional
     @RequiereRol({Rol.INSTRUCTOR, Rol.ADMIN})
     @Operation(summary = "Mis evaluaciones (INSTRUCTOR)")
-    public Response misEvaluaciones() {
+    public Response misEvaluaciones(
+            @QueryParam("pagina")   @DefaultValue("0")  int pagina,
+            @QueryParam("cantidad") @DefaultValue("20") int cantidad) {
         UUID idInstructor = UUID.fromString(usuarioAutenticado.obtenerIdUsuario());
-        List<ResumenEvaluacion> resumenes = repoEvaluaciones.buscarPorInstructor(idInstructor)
+        List<ResumenEvaluacion> resumenes = repoEvaluaciones
+                .buscarPorInstructor(idInstructor, pagina, Math.min(cantidad, 100))
                 .stream().map(ResumenEvaluacion::from).toList();
         return Response.ok(resumenes).build();
     }
@@ -118,8 +123,12 @@ public class RecursoEvaluaciones {
     @Transactional
     @RequiereRol({Rol.STUDENT, Rol.INSTRUCTOR, Rol.ADMIN, Rol.DIRECTOR})
     @Operation(summary = "Listar evaluaciones de un curso (resumen, sin preguntas)")
-    public Response buscarPorCurso(@PathParam("courseId") UUID idCurso) {
-        List<ResumenEvaluacion> resumenes = repoEvaluaciones.buscarPorCurso(idCurso)
+    public Response buscarPorCurso(
+            @PathParam("courseId") UUID idCurso,
+            @QueryParam("pagina")   @DefaultValue("0")  int pagina,
+            @QueryParam("cantidad") @DefaultValue("20") int cantidad) {
+        List<ResumenEvaluacion> resumenes = repoEvaluaciones
+                .buscarPorCurso(idCurso, pagina, Math.min(cantidad, 100))
                 .stream()
                 .map(ResumenEvaluacion::from)
                 .toList();

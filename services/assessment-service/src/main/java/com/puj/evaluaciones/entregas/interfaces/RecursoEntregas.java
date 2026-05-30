@@ -183,7 +183,7 @@ public class RecursoEntregas {
     @RequiereRol({Rol.INSTRUCTOR, Rol.ADMIN})
     @Operation(summary = "Métricas por evaluación de un curso (INSTRUCTOR/ADMIN)")
     public Response metricasCurso(@PathParam("courseId") UUID idCurso) {
-        List<Evaluacion> evaluaciones = repoEvaluaciones.buscarPorCurso(idCurso);
+        List<Evaluacion> evaluaciones = repoEvaluaciones.buscarPorCurso(idCurso, 0, 1000);
 
         List<Map<String, Object>> resultado = evaluaciones.stream()
                 .map(this::construirFilaMetricaCurso)

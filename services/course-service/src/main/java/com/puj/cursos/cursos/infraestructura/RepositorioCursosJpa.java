@@ -42,42 +42,74 @@ public class RepositorioCursosJpa implements RepositorioCursos {
 
     /**
      * {@inheritDoc}
+     * JOIN FETCH en módulos elimina N+1 del primer nivel.
+     * Las lecciones se cargan lazy con @BatchSize(30) en Modulo.lecciones.
      */
     @Override
     public Optional<Curso> buscarPorId(UUID id) {
-        return Optional.ofNullable(em.find(Curso.class, id))
-                .filter(c -> !c.estaEliminado());
+        try {
+            return Optional.of(em.createQuery(
+                            "SELECT DISTINCT c FROM Curso c"
+                            + " LEFT JOIN FETCH c.modulos"
+                            + " WHERE c.id = :id AND c.eliminadoEn IS NULL",
+                            Curso.class)
+                    .setParameter("id", id)
+                    .getSingleResult());
+        } catch (jakarta.persistence.NoResultException e) {
+            return Optional.empty();
+        }
     }
 
     /**
      * {@inheritDoc}
+     * 2-step: IDs paginados con SQL LIMIT, luego JOIN FETCH de módulos por IDs.
+     * Las lecciones se cargan lazy con @BatchSize(30), minimizando queries adicionales.
      */
     @Override
     public List<Curso> buscarPublicados(int pagina, int tamano) {
-        return em.createQuery(
-                        "SELECT c FROM Curso c"
+        List<UUID> ids = em.createQuery(
+                        "SELECT c.id FROM Curso c"
                         + " WHERE c.estado = :estado AND c.eliminadoEn IS NULL"
                         + " ORDER BY c.creadoEn DESC",
-                        Curso.class)
+                        UUID.class)
                 .setParameter("estado", EstadoCurso.PUBLISHED)
                 .setFirstResult(pagina * tamano)
                 .setMaxResults(tamano)
+                .getResultList();
+        if (ids.isEmpty()) return List.of();
+        return em.createQuery(
+                        "SELECT DISTINCT c FROM Curso c"
+                        + " LEFT JOIN FETCH c.modulos"
+                        + " WHERE c.id IN :ids"
+                        + " ORDER BY c.creadoEn DESC",
+                        Curso.class)
+                .setParameter("ids", ids)
                 .getResultList();
     }
 
     /**
      * {@inheritDoc}
+     * 2-step igual que buscarPublicados.
      */
     @Override
     public List<Curso> buscarPorInstructor(UUID idInstructor, int pagina, int tamano) {
-        return em.createQuery(
-                        "SELECT c FROM Curso c"
+        List<UUID> ids = em.createQuery(
+                        "SELECT c.id FROM Curso c"
                         + " WHERE c.idInstructor = :iid AND c.eliminadoEn IS NULL"
                         + " ORDER BY c.creadoEn DESC",
-                        Curso.class)
+                        UUID.class)
                 .setParameter("iid", idInstructor)
                 .setFirstResult(pagina * tamano)
                 .setMaxResults(tamano)
+                .getResultList();
+        if (ids.isEmpty()) return List.of();
+        return em.createQuery(
+                        "SELECT DISTINCT c FROM Curso c"
+                        + " LEFT JOIN FETCH c.modulos"
+                        + " WHERE c.id IN :ids"
+                        + " ORDER BY c.creadoEn DESC",
+                        Curso.class)
+                .setParameter("ids", ids)
                 .getResultList();
     }
 

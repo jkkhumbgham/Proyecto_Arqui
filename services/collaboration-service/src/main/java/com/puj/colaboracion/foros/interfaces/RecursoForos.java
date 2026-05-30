@@ -47,8 +47,11 @@ public class RecursoForos {
      */
     @GET
     @Operation(summary = "Listar todos los foros")
-    public Response listarForos() {
-        List<Map<String, Object>> resultado = repoForos.buscarTodos().stream()
+    public Response listarForos(
+            @QueryParam("pagina")   @DefaultValue("0")  int pagina,
+            @QueryParam("cantidad") @DefaultValue("50") int cantidad) {
+        List<Map<String, Object>> resultado = repoForos.buscarTodos(pagina, Math.min(cantidad, 200))
+                .stream()
                 .map(this::aMapaForo)
                 .collect(Collectors.toList());
         return Response.ok(resultado).build();

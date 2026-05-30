@@ -33,11 +33,13 @@ public interface RepositorioForos {
     Optional<Foro> buscarPorId(UUID id);
 
     /**
-     * Retorna todos los foros activos ordenados por fecha de creación descendente.
+     * Retorna foros activos con paginación, ordenados por fecha de creación descendente.
      *
-     * @return lista de foros activos (puede estar vacía)
+     * @param  pagina   número de página (base 0)
+     * @param  cantidad máximo de resultados
+     * @return lista paginada de foros activos (puede estar vacía)
      */
-    List<Foro> buscarTodos();
+    List<Foro> buscarTodos(int pagina, int cantidad);
 
     /**
      * Busca el foro activo de un curso.

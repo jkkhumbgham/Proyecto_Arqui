@@ -23,7 +23,11 @@ import java.util.UUID;
         schema            = "courses",
         uniqueConstraints = @UniqueConstraint(
                 name        = "uq_enrollment_user_course",
-                columnNames = {"user_id", "course_id"}))
+                columnNames = {"user_id", "course_id"}),
+        indexes = {
+                @Index(name = "ix_enrollments_user",   columnList = "user_id"),
+                @Index(name = "ix_enrollments_course", columnList = "course_id")
+        })
 public class Matricula {
 
     /** Identificador único de la matrícula, generado al persistir. */

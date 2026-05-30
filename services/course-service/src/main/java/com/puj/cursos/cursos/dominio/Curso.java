@@ -23,7 +23,8 @@ import java.util.UUID;
  * @since  1.0
  */
 @Entity
-@Table(name = "courses", schema = "courses")
+@Table(name = "courses", schema = "courses",
+        indexes = { @Index(name = "ix_courses_instructor", columnList = "instructor_id") })
 public class Curso {
 
     /** Identificador único del curso, generado al persistir. */

@@ -21,7 +21,11 @@ import java.util.UUID;
  * @since  1.0
  */
 @Entity
-@Table(name = "submissions", schema = "assessments")
+@Table(name = "submissions", schema = "assessments",
+        indexes = {
+                @Index(name = "ix_submissions_user",       columnList = "user_id"),
+                @Index(name = "ix_submissions_assessment", columnList = "assessment_id")
+        })
 public class Entrega {
 
     @Id

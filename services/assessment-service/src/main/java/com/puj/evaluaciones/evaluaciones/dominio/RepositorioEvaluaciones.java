@@ -36,23 +36,27 @@ public interface RepositorioEvaluaciones {
      *
      * @return lista de evaluaciones activas (puede estar vacía)
      */
-    List<Evaluacion> buscarTodas();
+    List<Evaluacion> buscarTodas(int pagina, int cantidad);
 
     /**
      * Retorna las evaluaciones activas de un curso ordenadas por fecha de creación.
      *
      * @param idCurso UUID del curso
+     * @param pagina  número de página (base 0)
+     * @param cantidad máximo de resultados
      * @return lista de evaluaciones del curso (puede estar vacía)
      */
-    List<Evaluacion> buscarPorCurso(UUID idCurso);
+    List<Evaluacion> buscarPorCurso(UUID idCurso, int pagina, int cantidad);
 
     /**
      * Retorna las evaluaciones activas creadas por un instructor.
      *
      * @param idInstructor UUID del instructor
+     * @param pagina  número de página (base 0)
+     * @param cantidad máximo de resultados
      * @return lista de evaluaciones del instructor (puede estar vacía)
      */
-    List<Evaluacion> buscarPorInstructor(UUID idInstructor);
+    List<Evaluacion> buscarPorInstructor(UUID idInstructor, int pagina, int cantidad);
 
     /**
      * Cuenta los intentos completados o calificados de un estudiante en una evaluación.

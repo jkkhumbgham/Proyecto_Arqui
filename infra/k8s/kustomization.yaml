@@ -10,6 +10,7 @@ resources:
   - configmaps.yaml
   # Infrastructure
   - postgres/deployment.yaml
+  - redis/pvc.yaml
   - redis/deployment.yaml
   - rabbitmq/deployment.yaml
   # Business services

@@ -22,6 +22,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "users", schema = "users",
+        indexes = { @Index(name = "ix_users_email", columnList = "email") },
         uniqueConstraints = @UniqueConstraint(name = "uq_users_email", columnNames = "email"))
 public class Usuario {
 

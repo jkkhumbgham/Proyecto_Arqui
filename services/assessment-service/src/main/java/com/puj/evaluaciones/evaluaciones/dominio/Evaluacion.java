@@ -23,7 +23,11 @@ import java.util.UUID;
  * @since  1.0
  */
 @Entity
-@Table(name = "assessments", schema = "assessments")
+@Table(name = "assessments", schema = "assessments",
+        indexes = {
+                @Index(name = "ix_assessments_course",     columnList = "course_id"),
+                @Index(name = "ix_assessments_instructor", columnList = "instructor_id")
+        })
 public class Evaluacion {
 
     @Id

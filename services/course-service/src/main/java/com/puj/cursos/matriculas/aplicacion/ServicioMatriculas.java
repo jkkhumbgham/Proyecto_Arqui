@@ -36,6 +36,8 @@ public class ServicioMatriculas {
     @Inject private RepositorioMatriculas repositorioMatriculas;
     @Inject private RepositorioCursos     repositorioCursos;
     @Inject private PublicadorEventos     publicadorEventos;
+    // Self-injection para llamar métodos @Transactional a través del proxy CDI
+    @Inject private ServicioMatriculas    self;
 
     /**
      * Matricula a un estudiante en un curso, validando disponibilidad y unicidad.
@@ -49,8 +51,19 @@ public class ServicioMatriculas {
      * @throws BadRequestException si el curso no está publicado, el estudiante ya
      *                             está matriculado o el curso alcanzó su capacidad máxima
      */
-    @Transactional
     public RespuestaMatricula matricular(UUID idUsuario, UUID idCurso) {
+        RespuestaMatricula respuesta = self.persistirMatricula(idUsuario, idCurso);
+        publicadorEventos.publicarAnaliticas(new EventoMatriculaCurso(
+                respuesta.id().toString(),
+                idUsuario.toString(),
+                idCurso.toString(),
+                respuesta.tituloCurso()));
+        return respuesta;
+    }
+
+    /** Parte transaccional de la matriculación — solo BD, sin RabbitMQ. */
+    @Transactional
+    public RespuestaMatricula persistirMatricula(UUID idUsuario, UUID idCurso) {
         Curso curso = repositorioCursos.buscarPorId(idCurso)
                 .orElseThrow(() -> new NotFoundException("Curso no encontrado."));
 
@@ -70,14 +83,6 @@ public class ServicioMatriculas {
         matricula.establecerIdUsuario(idUsuario);
         matricula.establecerCurso(curso);
         repositorioMatriculas.guardar(matricula);
-
-        publicadorEventos.publicarAnaliticas(new EventoMatriculaCurso(
-                matricula.getId().toString(),
-                idUsuario.toString(),
-                idCurso.toString(),
-                curso.obtenerTitulo()
-        ));
-
         return RespuestaMatricula.desde(matricula);
     }
 
@@ -88,8 +93,8 @@ public class ServicioMatriculas {
      * @return lista de matrículas del estudiante proyectadas como {@link RespuestaMatricula}
      */
     @Transactional
-    public List<RespuestaMatricula> buscarPorUsuario(UUID idUsuario) {
-        return repositorioMatriculas.buscarPorUsuario(idUsuario).stream()
+    public List<RespuestaMatricula> buscarPorUsuario(UUID idUsuario, int pagina, int cantidad) {
+        return repositorioMatriculas.buscarPorUsuario(idUsuario, pagina, cantidad).stream()
                 .map(RespuestaMatricula::desde)
                 .toList();
     }

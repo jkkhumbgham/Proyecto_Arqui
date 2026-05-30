@@ -361,7 +361,7 @@ public class ServicioEntregas {
      *         o si alguna aún no ha sido aprobada
      */
     private boolean calcularTodasLasEvaluacionesAprobadas(UUID idUsuario, UUID idCurso) {
-        List<Evaluacion> evaluacionesCurso = repoEvaluaciones.buscarPorCurso(idCurso);
+        List<Evaluacion> evaluacionesCurso = repoEvaluaciones.buscarPorCurso(idCurso, 0, 1000);
         if (evaluacionesCurso.isEmpty()) return false;
 
         List<UUID> idsEvaluaciones =

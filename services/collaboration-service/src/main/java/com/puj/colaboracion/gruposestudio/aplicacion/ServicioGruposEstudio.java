@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 
 /**
@@ -228,37 +229,55 @@ public class ServicioGruposEstudio {
 
         String idsUnidos = String.join(",", idsEvaluaciones);
         List<MiembroGrupo> miembros = repo.buscarMiembrosActivos(grupo.getId());
+        if (miembros.isEmpty()) return null;
+
+        String tokenAuth = "Bearer " + usuarioActual.obtenerTokenBruto();
+
+        // Lanza todas las peticiones HTTP en paralelo y espera el conjunto
+        List<CompletableFuture<double[]>> futuros = miembros.stream()
+                .map(m -> promedioAsync(m.getIdUsuario(), idsUnidos, tokenAuth)
+                        .thenApply(prom -> new double[]{prom}))
+                .toList();
+
+        CompletableFuture.allOf(futuros.toArray(new CompletableFuture[0])).join();
+
         UUID   mejorMiembro = null;
         double mejorPuntaje = -1.0;
-
-        for (MiembroGrupo m : miembros) {
-            double promedio = obtenerPromedioPuntaje(m.getIdUsuario(), idsUnidos);
+        for (int i = 0; i < miembros.size(); i++) {
+            double promedio = futuros.get(i).join()[0];
             if (promedio > mejorPuntaje) {
                 mejorPuntaje = promedio;
-                mejorMiembro = m.getIdUsuario();
+                mejorMiembro = miembros.get(i).getIdUsuario();
             }
         }
         return mejorMiembro;
     }
 
+    private CompletableFuture<Double> promedioAsync(
+            UUID idUsuario, String idsEvaluaciones, String tokenAuth) {
+        HttpRequest solicitud = HttpRequest.newBuilder()
+                .uri(URI.create(URL_SERVICIO_EVALUACIONES
+                        + "/api/v1/submissions/avg-for-assessments"
+                        + "?userId=" + idUsuario
+                        + "&assessmentIds=" + idsEvaluaciones))
+                .header("Authorization", tokenAuth)
+                .GET().timeout(Duration.ofSeconds(3)).build();
+        return clienteHttp
+                .sendAsync(solicitud, HttpResponse.BodyHandlers.ofString())
+                .thenApply(resp -> {
+                    if (resp.statusCode() == 200) {
+                        try {
+                            return mapeador.readTree(resp.body()).path("avgScorePct").asDouble(-1.0);
+                        } catch (Exception ignorado) {}
+                    }
+                    return -1.0;
+                })
+                .exceptionally(ex -> -1.0);
+    }
+
     private double obtenerPromedioPuntaje(UUID idUsuario, String idsEvaluaciones) {
-        try {
-            HttpRequest solicitudPromedio = HttpRequest.newBuilder()
-                    .uri(URI.create(URL_SERVICIO_EVALUACIONES
-                            + "/api/v1/submissions/avg-for-assessments"
-                            + "?userId=" + idUsuario
-                            + "&assessmentIds=" + idsEvaluaciones))
-                    .header("Authorization", "Bearer " + usuarioActual.obtenerTokenBruto())
-                    .GET().timeout(Duration.ofSeconds(3)).build();
-            HttpResponse<String> respuestaPromedio =
-                    clienteHttp.send(solicitudPromedio,
-                            HttpResponse.BodyHandlers.ofString());
-            if (respuestaPromedio.statusCode() == 200) {
-                JsonNode nodo = mapeador.readTree(respuestaPromedio.body());
-                return nodo.path("avgScorePct").asDouble(-1.0);
-            }
-        } catch (Exception ignorado) {}
-        return -1.0;
+        return promedioAsync(idUsuario, idsEvaluaciones,
+                "Bearer " + usuarioActual.obtenerTokenBruto()).join();
     }
 
     private void actualizarMarcasTutor(GrupoEstudio grupo, UUID idTutor) {

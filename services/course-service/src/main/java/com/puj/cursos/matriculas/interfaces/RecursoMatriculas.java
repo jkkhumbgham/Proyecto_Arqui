@@ -65,9 +65,11 @@ public class RecursoMatriculas {
     @Path("/my")
     @RequiereRol(Rol.STUDENT)
     @Operation(summary = "Mis matrículas")
-    public List<RespuestaMatricula> misMatriculas() {
+    public List<RespuestaMatricula> misMatriculas(
+            @QueryParam("pagina")   @DefaultValue("0")   int pagina,
+            @QueryParam("cantidad") @DefaultValue("50")  int cantidad) {
         UUID idUsuario = UUID.fromString(usuarioAutenticado.obtenerIdUsuario());
-        return servicioMatriculas.buscarPorUsuario(idUsuario);
+        return servicioMatriculas.buscarPorUsuario(idUsuario, pagina, Math.min(cantidad, 200));
     }
 
     /**

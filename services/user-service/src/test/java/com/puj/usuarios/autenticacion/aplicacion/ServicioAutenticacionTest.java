@@ -54,6 +54,9 @@ class ServicioAutenticacionTest {
 
     @BeforeEach
     void configurar() {
+        // CDI no existe en unit tests: inyectamos self manualmente igual que hace el contenedor
+        establecerCampo(servicioAutenticacion, "self", servicioAutenticacion);
+
         usuarioEjemplo = new Usuario();
         establecerCampo(usuarioEjemplo, "id", UUID.randomUUID());
         usuarioEjemplo.establecerCorreo("test@puj.edu.co");
