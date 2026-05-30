@@ -9,12 +9,12 @@ namespace Puj.Analytics.Consumers;
 /// <para>
 /// Actualmente reservado para uso futuro. La emisión de certificados y
 /// la lógica de finalización de curso se gestionan en
-/// <see cref="AssessmentSubmittedConsumer"/>. Este consumer solo registra
+/// <see cref="ConsumidorEvaluacionEntregada"/>. Este consumer solo registra
 /// el evento a nivel de depuración.
 /// </para>
 /// </summary>
 /// <param name="logger">Logger estructurado del consumer.</param>
-public class LessonCompletedConsumer(ILogger<LessonCompletedConsumer> logger)
+public class ConsumidorLeccionCompletada(ILogger<ConsumidorLeccionCompletada> logger)
     : IConsumer<LessonCompletedMessage>
 {
     /// <summary>

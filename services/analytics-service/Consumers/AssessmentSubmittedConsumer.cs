@@ -11,17 +11,17 @@ namespace Puj.Analytics.Consumers;
 ///
 /// <para>
 /// Actualiza de forma atómica los contadores de plataforma
-/// (<see cref="PlatformStats"/>) y por curso (<see cref="CourseMetric"/>)
+/// (<see cref="EstadisticasPlataforma"/>) y por curso (<see cref="MetricaCurso"/>)
 /// cuando un estudiante entrega una evaluación. Todos los UPDATE se
 /// realizan con SQL crudo para garantizar incrementos atómicos y evitar
 /// lost-updates en escenarios de alta concurrencia.
 /// </para>
 /// </summary>
-/// <param name="db">Contexto de base de datos de analítica.</param>
+/// <param name="baseDatos">Contexto de base de datos de analítica.</param>
 /// <param name="logger">Logger estructurado del consumer.</param>
-public class AssessmentSubmittedConsumer(
-    AnalyticsDbContext db,
-    ILogger<AssessmentSubmittedConsumer> logger)
+public class ConsumidorEvaluacionEntregada(
+    ContextoBaseDatosAnaliticas baseDatos,
+    ILogger<ConsumidorEvaluacionEntregada> logger)
     : IConsumer<AssessmentSubmittedMessage>
 {
     /// <summary>
@@ -35,54 +35,54 @@ public class AssessmentSubmittedConsumer(
     /// <returns>Una tarea que representa la operación asíncrona.</returns>
     public async Task Consume(ConsumeContext<AssessmentSubmittedMessage> context)
     {
-        var msg = context.Message;
+        var mensaje = context.Message;
         logger.LogInformation(
             "Processing ASSESSMENT_SUBMITTED: SubmissionId={SubmissionId} " +
             "CourseId={CourseId} Score={Score}/{MaxScore} Passed={Passed}",
-            msg.SubmissionId, msg.CourseId, msg.Score, msg.MaxScore, msg.Passed);
+            mensaje.SubmissionId, mensaje.CourseId, mensaje.Score, mensaje.MaxScore, mensaje.Passed);
 
-        if (string.IsNullOrWhiteSpace(msg.CourseId)
-            || !Guid.TryParse(msg.CourseId, out var courseId))
+        if (string.IsNullOrWhiteSpace(mensaje.CourseId)
+            || !Guid.TryParse(mensaje.CourseId, out var idCurso))
         {
             logger.LogWarning(
                 "ASSESSMENT_SUBMITTED descartado — CourseId inválido o nulo: '{CourseId}'",
-                msg.CourseId);
+                mensaje.CourseId);
             return;
         }
 
-        decimal scoreToAdd    = msg.MaxScore > 0 ? msg.Score    : 0m;
-        decimal maxScoreToAdd = msg.MaxScore > 0 ? msg.MaxScore : 0m;
-        int     passIncrement = msg.Passed ? 1 : 0;
+        decimal puntajeAAgregar    = mensaje.MaxScore > 0 ? mensaje.Score    : 0m;
+        decimal maxPuntajeAAgregar = mensaje.MaxScore > 0 ? mensaje.MaxScore : 0m;
+        int     incrementoAprobado = mensaje.Passed ? 1 : 0;
 
         // ── Contadores globales de plataforma (UPDATE atómico con raw SQL) ────
-        int updated = await db.Database.ExecuteSqlRawAsync(
+        int filasActualizadas = await baseDatos.Database.ExecuteSqlRawAsync(
             "UPDATE analytics.platform_stats " +
             "SET total_submissions  = total_submissions  + 1, " +
             "    raw_score_sum      = raw_score_sum      + {0}, " +
             "    raw_max_score_sum  = raw_max_score_sum  + {1}, " +
             "    pass_count         = pass_count         + {2}, " +
             "    updated_at         = NOW()",
-            scoreToAdd, maxScoreToAdd, passIncrement);
+            puntajeAAgregar, maxPuntajeAAgregar, incrementoAprobado);
 
-        if (updated == 0)
+        if (filasActualizadas == 0)
         {
             // Primera fila de platform_stats — no debería ocurrir después de
             // enrollments, pero se maneja por si analytics_db fue truncada.
-            db.PlatformStats.Add(new PlatformStats {
-                TotalSubmissions = 1,
-                RawScoreSum      = scoreToAdd,
-                RawMaxScoreSum   = maxScoreToAdd,
-                PassCount        = passIncrement,
-                UpdatedAt        = DateTime.UtcNow
+            baseDatos.EstadisticasPlataforma.Add(new EstadisticasPlataforma {
+                TotalEntregas        = 1,
+                SumaPuntajesBrutos   = puntajeAAgregar,
+                SumaMaxPuntajesBrutos = maxPuntajeAAgregar,
+                ConteoAprobados      = incrementoAprobado,
+                ActualizadoEn        = DateTime.UtcNow
             });
-            await db.SaveChangesAsync();
+            await baseDatos.SaveChangesAsync();
         }
 
         // ── Contadores por curso (solo actualiza si el metric ya existe) ──────
-        // La creación del CourseMetric y el conteo de TotalCourses es
-        // responsabilidad exclusiva de CourseEnrolledConsumer.
-        // Esto evita que submissions inflen TotalCourses en el dashboard.
-        await db.Database.ExecuteSqlRawAsync(
+        // La creación del MetricaCurso y el conteo de TotalCursos es
+        // responsabilidad exclusiva de ConsumidorMatriculaCurso.
+        // Esto evita que submissions inflen TotalCursos en el dashboard.
+        await baseDatos.Database.ExecuteSqlRawAsync(
             "UPDATE analytics.course_metrics " +
             "SET total_submissions  = total_submissions  + 1, " +
             "    raw_score_sum      = raw_score_sum      + {0}, " +
@@ -90,13 +90,13 @@ public class AssessmentSubmittedConsumer(
             "    pass_count         = pass_count         + {2}, " +
             "    updated_at         = NOW() " +
             "WHERE course_id = {3}",
-            scoreToAdd, maxScoreToAdd, passIncrement, courseId);
+            puntajeAAgregar, maxPuntajeAAgregar, incrementoAprobado, idCurso);
 
         // Edge case: si el metric no existe aún (submission llega antes del
         // enrollment), los contadores quedarán desactualizados hasta que
         // llegue el COURSE_ENROLLED y cree el metric.
         logger.LogInformation(
             "ASSESSMENT_SUBMITTED procesado: CourseId={CourseId} Passed={Passed}",
-            courseId, msg.Passed);
+            idCurso, mensaje.Passed);
     }
 }

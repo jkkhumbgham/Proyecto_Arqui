@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Puj.Analytics.Models;
 
 /// <summary>
@@ -10,41 +12,48 @@ namespace Puj.Analytics.Models;
 /// <c>USER_REGISTERED</c> y <c>USER_LOGGED_IN</c>.
 /// </para>
 /// </summary>
-public class StudentNameCache
+public class CacheNombreEstudiante
 {
     /// <summary>
     /// Identificador único del registro de caché.
     /// </summary>
+    [JsonPropertyName("id")]
     public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>
     /// Identificador del usuario en la plataforma. Tiene índice único.
     /// </summary>
-    public Guid UserId { get; set; }
+    [JsonPropertyName("userId")]
+    public Guid IdUsuario { get; set; }
 
     /// <summary>
     /// Nombre completo del usuario (nombre + apellido concatenados).
     /// </summary>
-    public string StudentName { get; set; } = string.Empty;
+    [JsonPropertyName("studentName")]
+    public string NombreEstudiante { get; set; } = string.Empty;
 
     /// <summary>
     /// Correo electrónico del usuario.
     /// </summary>
-    public string Email { get; set; } = string.Empty;
+    [JsonPropertyName("email")]
+    public string Correo { get; set; } = string.Empty;
 
     /// <summary>
     /// Rol del usuario en la plataforma (p. ej. STUDENT, INSTRUCTOR, ADMIN).
     /// </summary>
-    public string Role { get; set; } = string.Empty;
+    [JsonPropertyName("role")]
+    public string Rol { get; set; } = string.Empty;
 
     /// <summary>
     /// Fecha y hora (UTC) del último inicio de sesión registrado.
     /// <c>null</c> indica que el usuario nunca ha iniciado sesión.
     /// </summary>
-    public DateTime? LastLoginAt { get; set; }
+    [JsonPropertyName("lastLoginAt")]
+    public DateTime? UltimoAccesoEn { get; set; }
 
     /// <summary>
     /// Fecha y hora (UTC) de la última actualización de este registro de caché.
     /// </summary>
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    [JsonPropertyName("updatedAt")]
+    public DateTime ActualizadoEn { get; set; } = DateTime.UtcNow;
 }

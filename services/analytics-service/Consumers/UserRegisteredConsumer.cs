@@ -10,22 +10,22 @@ namespace Puj.Analytics.Consumers;
 /// Consumer de MassTransit que procesa el evento <c>USER_REGISTERED</c>.
 ///
 /// <para>
-/// Incrementa el contador <c>total_users</c> en <see cref="PlatformStats"/>
+/// Incrementa el contador <c>total_users</c> en <see cref="EstadisticasPlataforma"/>
 /// y crea o actualiza la entrada del usuario en el caché local
-/// <see cref="StudentNameCache"/> con nombre completo, correo y rol.
+/// <see cref="CacheNombreEstudiante"/> con nombre completo, correo y rol.
 /// </para>
 /// </summary>
-/// <param name="db">Contexto de base de datos de analítica.</param>
+/// <param name="baseDatos">Contexto de base de datos de analítica.</param>
 /// <param name="logger">Logger estructurado del consumer.</param>
-public class UserRegisteredConsumer(
-    AnalyticsDbContext db,
-    ILogger<UserRegisteredConsumer> logger)
+public class ConsumidorUsuarioRegistrado(
+    ContextoBaseDatosAnaliticas baseDatos,
+    ILogger<ConsumidorUsuarioRegistrado> logger)
     : IConsumer<UserRegisteredMessage>
 {
     /// <summary>
     /// Procesa un mensaje <see cref="UserRegisteredMessage"/> recibido desde
-    /// RabbitMQ, incrementa el total de usuarios en <see cref="PlatformStats"/>
-    /// y persiste los datos del usuario en <see cref="StudentNameCache"/>.
+    /// RabbitMQ, incrementa el total de usuarios en <see cref="EstadisticasPlataforma"/>
+    /// y persiste los datos del usuario en <see cref="CacheNombreEstudiante"/>.
     /// </summary>
     /// <param name="context">
     /// Contexto de consumo de MassTransit que contiene el mensaje.
@@ -33,34 +33,34 @@ public class UserRegisteredConsumer(
     /// <returns>Una tarea que representa la operación asíncrona.</returns>
     public async Task Consume(ConsumeContext<UserRegisteredMessage> context)
     {
-        var msg = context.Message;
-        logger.LogInformation("Processing USER_REGISTERED: {UserId}", msg.UserId);
+        var mensaje = context.Message;
+        logger.LogInformation("Processing USER_REGISTERED: {UserId}", mensaje.UserId);
 
-        var stats = await db.PlatformStats.FirstOrDefaultAsync();
-        if (stats == null)
+        var estadisticas = await baseDatos.EstadisticasPlataforma.FirstOrDefaultAsync();
+        if (estadisticas == null)
         {
-            stats = new PlatformStats();
-            db.PlatformStats.Add(stats);
+            estadisticas = new EstadisticasPlataforma();
+            baseDatos.EstadisticasPlataforma.Add(estadisticas);
         }
 
-        stats.TotalUsers++;
-        stats.UpdatedAt = DateTime.UtcNow;
+        estadisticas.TotalUsuarios++;
+        estadisticas.ActualizadoEn = DateTime.UtcNow;
 
-        var userId = Guid.Parse(msg.UserId);
-        var cache  = await db.StudentNameCaches
-            .FirstOrDefaultAsync(c => c.UserId == userId);
+        var idUsuario    = Guid.Parse(mensaje.UserId);
+        var entradaCache = await baseDatos.CachesNombreEstudiante
+            .FirstOrDefaultAsync(c => c.IdUsuario == idUsuario);
 
-        if (cache == null)
+        if (entradaCache == null)
         {
-            cache = new StudentNameCache { UserId = userId };
-            db.StudentNameCaches.Add(cache);
+            entradaCache = new CacheNombreEstudiante { IdUsuario = idUsuario };
+            baseDatos.CachesNombreEstudiante.Add(entradaCache);
         }
 
-        cache.StudentName = $"{msg.FirstName} {msg.LastName}".Trim();
-        cache.Email       = msg.Email ?? string.Empty;
-        cache.Role        = msg.Role  ?? string.Empty;
-        cache.UpdatedAt   = DateTime.UtcNow;
+        entradaCache.NombreEstudiante = $"{mensaje.FirstName} {mensaje.LastName}".Trim();
+        entradaCache.Correo           = mensaje.Email ?? string.Empty;
+        entradaCache.Rol              = mensaje.Role  ?? string.Empty;
+        entradaCache.ActualizadoEn    = DateTime.UtcNow;
 
-        await db.SaveChangesAsync();
+        await baseDatos.SaveChangesAsync();
     }
 }

@@ -21,30 +21,30 @@ public static class CourseAnalyticsEndpoints
     /// se registran los endpoints.</param>
     public static void MapCourseAnalyticsEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/v1/analytics/courses")
+        var grupo = app.MapGroup("/api/v1/analytics/courses")
             .WithTags("Analítica de Cursos")
             .RequireAuthorization();
 
         // ── GET /api/v1/analytics/courses/{courseId}/summary ─────────────────
-        group.MapGet("/{courseId}/summary", async (Guid courseId, AnalyticsDbContext db) =>
+        grupo.MapGet("/{courseId}/summary", async (Guid courseId, ContextoBaseDatosAnaliticas baseDatos) =>
         {
-            var metric = await db.CourseMetrics
-                .FirstOrDefaultAsync(m => m.CourseId == courseId);
+            var metrica = await baseDatos.MetricasCurso
+                .FirstOrDefaultAsync(m => m.IdCurso == courseId);
 
-            if (metric == null)
+            if (metrica == null)
                 return Results.NotFound(new {
                     error   = "NOT_FOUND",
                     message = "Sin datos para este curso."
                 });
 
             return Results.Ok(new {
-                courseId         = metric.CourseId,
-                courseTitle      = metric.CourseTitle,
-                totalEnrollments = metric.TotalEnrollments,
-                totalSubmissions = metric.TotalSubmissions,
-                averageScore     = metric.AverageScore,
-                passRate         = metric.PassRate,
-                updatedAt        = metric.UpdatedAt
+                courseId         = metrica.IdCurso,
+                courseTitle      = metrica.TituloCurso,
+                totalEnrollments = metrica.TotalInscripciones,
+                totalSubmissions = metrica.TotalEntregas,
+                averageScore     = metrica.PuntajePromedio,
+                passRate         = metrica.TasaAprobacion,
+                updatedAt        = metrica.ActualizadoEn
             });
         })
         .WithSummary("Métricas de un curso (INSTRUCTOR/ADMIN)");

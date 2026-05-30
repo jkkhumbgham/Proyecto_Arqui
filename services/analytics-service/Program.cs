@@ -10,23 +10,23 @@ using Puj.Analytics.Exports;
 using Puj.Analytics.Services;
 using System.Security.Cryptography;
 
-var builder = WebApplication.CreateBuilder(args);
+var constructor = WebApplication.CreateBuilder(args);
 
 // ─── Database ─────────────────────────────────────────────────────────────────
-builder.Services.AddDbContext<AnalyticsDbContext>(opts =>
-    opts.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+constructor.Services.AddDbContext<ContextoBaseDatosAnaliticas>(opciones =>
+    opciones.UseNpgsql(constructor.Configuration.GetConnectionString("DefaultConnection")));
 
 // ─── JWT Authentication ────────────────────────────────────────────────────────
-var jwtPublicKeyPem = builder.Configuration["Jwt:PublicKey"]
+var clavePublicaJwtPem = constructor.Configuration["Jwt:PublicKey"]
     ?? Environment.GetEnvironmentVariable("JWT_PUBLIC_KEY")
     ?? throw new InvalidOperationException("JWT_PUBLIC_KEY not configured.");
 
 var rsa = RSA.Create();
-rsa.ImportFromPem(jwtPublicKeyPem.Replace("\\n", "\n"));
+rsa.ImportFromPem(clavePublicaJwtPem.Replace("\\n", "\n"));
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(opts => {
-        opts.TokenValidationParameters = new TokenValidationParameters {
+constructor.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(opciones => {
+        opciones.TokenValidationParameters = new TokenValidationParameters {
             ValidateIssuer           = true,
             ValidIssuer              = "puj-learning-platform",
             ValidateAudience         = false,
@@ -37,27 +37,27 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+constructor.Services.AddAuthorization();
 
 // ─── Services ─────────────────────────────────────────────────────────────────
-builder.Services.AddHostedService<MonthlySnapshotJob>();
+constructor.Services.AddHostedService<TrabajoResumenMensual>();
 
 // ─── MassTransit / RabbitMQ ────────────────────────────────────────────────────
-builder.Services.AddMassTransit(x => {
-    x.AddConsumer<AssessmentSubmittedConsumer>();
-    x.AddConsumer<CourseEnrolledConsumer>();
-    x.AddConsumer<UserRegisteredConsumer>();
-    x.AddConsumer<UserLoggedInConsumer>();
-    x.AddConsumer<LessonCompletedConsumer>();
+constructor.Services.AddMassTransit(x => {
+    x.AddConsumer<ConsumidorEvaluacionEntregada>();
+    x.AddConsumer<ConsumidorMatriculaCurso>();
+    x.AddConsumer<ConsumidorUsuarioRegistrado>();
+    x.AddConsumer<ConsumidorUsuarioConectado>();
+    x.AddConsumer<ConsumidorLeccionCompletada>();
 
     x.UsingRabbitMq((ctx, cfg) => {
         cfg.Host(
-            builder.Configuration["RabbitMQ:Host"] ?? "localhost",
-            ushort.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
-            builder.Configuration["RabbitMQ:VirtualHost"] ?? "/",
+            constructor.Configuration["RabbitMQ:Host"] ?? "localhost",
+            ushort.Parse(constructor.Configuration["RabbitMQ:Port"] ?? "5672"),
+            constructor.Configuration["RabbitMQ:VirtualHost"] ?? "/",
             h => {
-                h.Username(builder.Configuration["RabbitMQ:Username"] ?? "guest");
-                h.Password(builder.Configuration["RabbitMQ:Password"] ?? "guest");
+                h.Username(constructor.Configuration["RabbitMQ:Username"] ?? "guest");
+                h.Password(constructor.Configuration["RabbitMQ:Password"] ?? "guest");
             });
 
         // Un único endpoint — todos los mensajes del exchange platform.events
@@ -66,11 +66,11 @@ builder.Services.AddMassTransit(x => {
         cfg.ReceiveEndpoint("analytics.results", e => {
             e.SetQueueArgument("x-message-ttl", 86400000L);
             e.SetQueueArgument("x-dead-letter-exchange", "platform.dlx");
-            e.ConfigureConsumer<AssessmentSubmittedConsumer>(ctx);
-            e.ConfigureConsumer<CourseEnrolledConsumer>(ctx);
-            e.ConfigureConsumer<UserRegisteredConsumer>(ctx);
-            e.ConfigureConsumer<UserLoggedInConsumer>(ctx);
-            e.ConfigureConsumer<LessonCompletedConsumer>(ctx);
+            e.ConfigureConsumer<ConsumidorEvaluacionEntregada>(ctx);
+            e.ConfigureConsumer<ConsumidorMatriculaCurso>(ctx);
+            e.ConfigureConsumer<ConsumidorUsuarioRegistrado>(ctx);
+            e.ConfigureConsumer<ConsumidorUsuarioConectado>(ctx);
+            e.ConfigureConsumer<ConsumidorLeccionCompletada>(ctx);
             e.UseMessageRetry(r => r.Intervals(500, 1000, 2000));
         });
     });
@@ -78,15 +78,15 @@ builder.Services.AddMassTransit(x => {
 
 // Esperar hasta 5 min a que RabbitMQ esté listo (K8s: race condition en arranque).
 // Si falla dentro de StartTimeout, el pod falla y K8s lo reinicia — ciclo seguro.
-builder.Services.Configure<MassTransitHostOptions>(options => {
-    options.WaitUntilStarted = true;
-    options.StartTimeout    = TimeSpan.FromSeconds(300); // 5 minutos
-    options.StopTimeout     = TimeSpan.FromSeconds(30);
+constructor.Services.Configure<MassTransitHostOptions>(opciones => {
+    opciones.WaitUntilStarted = true;
+    opciones.StartTimeout    = TimeSpan.FromSeconds(300); // 5 minutos
+    opciones.StopTimeout     = TimeSpan.FromSeconds(30);
 });
 
 // ─── Swagger / OpenAPI ─────────────────────────────────────────────────────────
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c => {
+constructor.Services.AddEndpointsApiExplorer();
+constructor.Services.AddSwaggerGen(c => {
     c.SwaggerDoc("v1", new() {
         Title   = "Analytics Service API",
         Version = "v1",
@@ -94,28 +94,28 @@ builder.Services.AddSwaggerGen(c => {
     });
 });
 
-var app = builder.Build();
+var app = constructor.Build();
 
 // ─── Migrations ────────────────────────────────────────────────────────────────
-using (var scope = app.Services.CreateScope()) {
-    var db  = scope.ServiceProvider.GetRequiredService<AnalyticsDbContext>();
-    var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+using (var alcance = app.Services.CreateScope()) {
+    var baseDatos = alcance.ServiceProvider.GetRequiredService<ContextoBaseDatosAnaliticas>();
+    var log       = alcance.ServiceProvider.GetRequiredService<ILogger<Program>>();
     try {
-        db.Database.EnsureCreated();
+        baseDatos.Database.EnsureCreated();
         log.LogInformation("Analytics schema ready.");
 
         // Migración idempotente: añade columnas nuevas si no existen.
         // EnsureCreated() crea las tablas la primera vez pero no altera las existentes.
-        db.Database.ExecuteSqlRaw(@"
+        baseDatos.Database.ExecuteSqlRaw(@"
             ALTER TABLE analytics.student_name_cache
                 ADD COLUMN IF NOT EXISTS email       VARCHAR(200) NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS role        VARCHAR(50)  NOT NULL DEFAULT '',
                 ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
         ");
 
-        if (!db.PlatformStats.Any()) {
-            db.PlatformStats.Add(new Puj.Analytics.Models.PlatformStats());
-            db.SaveChanges();
+        if (!baseDatos.EstadisticasPlataforma.Any()) {
+            baseDatos.EstadisticasPlataforma.Add(new Puj.Analytics.Models.EstadisticasPlataforma());
+            baseDatos.SaveChanges();
             log.LogInformation("platform_stats singleton creado.");
         }
     } catch (Exception ex) {

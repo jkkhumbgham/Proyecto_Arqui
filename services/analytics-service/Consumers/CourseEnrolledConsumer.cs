@@ -10,26 +10,26 @@ namespace Puj.Analytics.Consumers;
 /// Consumer de MassTransit que procesa el evento <c>COURSE_ENROLLED</c>.
 ///
 /// <para>
-/// Es el único responsable de crear registros <see cref="CourseMetric"/>
-/// e incrementar <c>total_courses</c> en <see cref="PlatformStats"/>.
+/// Es el único responsable de crear registros <see cref="MetricaCurso"/>
+/// e incrementar <c>total_courses</c> en <see cref="EstadisticasPlataforma"/>.
 /// Usa una transacción explícita para garantizar que tanto el INSERT/UPDATE
 /// del metric como el UPDATE de platform_stats sean atómicos; si ocurre
 /// una violación de clave única (race condition entre consumers del mismo
 /// curso), la transacción se revierte limpiamente y MassTransit reintenta.
 /// </para>
 /// </summary>
-/// <param name="db">Contexto de base de datos de analítica.</param>
+/// <param name="baseDatos">Contexto de base de datos de analítica.</param>
 /// <param name="logger">Logger estructurado del consumer.</param>
-public class CourseEnrolledConsumer(
-    AnalyticsDbContext db,
-    ILogger<CourseEnrolledConsumer> logger)
+public class ConsumidorMatriculaCurso(
+    ContextoBaseDatosAnaliticas baseDatos,
+    ILogger<ConsumidorMatriculaCurso> logger)
     : IConsumer<CourseEnrolledMessage>
 {
     /// <summary>
     /// Procesa un mensaje <see cref="CourseEnrolledMessage"/> recibido desde
-    /// RabbitMQ, crea o actualiza el <see cref="CourseMetric"/> del curso e
+    /// RabbitMQ, crea o actualiza el <see cref="MetricaCurso"/> del curso e
     /// incrementa los contadores de inscripciones (y cursos, si es nuevo) en
-    /// <see cref="PlatformStats"/>.
+    /// <see cref="EstadisticasPlataforma"/>.
     /// </summary>
     /// <param name="context">
     /// Contexto de consumo de MassTransit que contiene el mensaje.
@@ -37,18 +37,18 @@ public class CourseEnrolledConsumer(
     /// <returns>Una tarea que representa la operación asíncrona.</returns>
     public async Task Consume(ConsumeContext<CourseEnrolledMessage> context)
     {
-        var msg = context.Message;
+        var mensaje = context.Message;
         logger.LogInformation(
             "Processing COURSE_ENROLLED: UserId={UserId} CourseId={CourseId} " +
             "CourseTitle={CourseTitle}",
-            msg.UserId, msg.CourseId, msg.CourseTitle);
+            mensaje.UserId, mensaje.CourseId, mensaje.CourseTitle);
 
-        if (string.IsNullOrWhiteSpace(msg.CourseId)
-            || !Guid.TryParse(msg.CourseId, out var courseId))
+        if (string.IsNullOrWhiteSpace(mensaje.CourseId)
+            || !Guid.TryParse(mensaje.CourseId, out var idCurso))
         {
             logger.LogWarning(
                 "COURSE_ENROLLED descartado — CourseId inválido o nulo: '{CourseId}'",
-                msg.CourseId);
+                mensaje.CourseId);
             return;
         }
 
@@ -56,35 +56,35 @@ public class CourseEnrolledConsumer(
         // Envuelve el SaveChangesAsync (EF Core) y los UPDATE de platform_stats
         // (raw SQL) en la misma transacción PostgreSQL para eliminar el riesgo
         // de double-count en escenarios de race entre consumers del mismo curso.
-        await using var tx = await db.Database.BeginTransactionAsync();
+        await using var transaccion = await baseDatos.Database.BeginTransactionAsync();
 
         // ── course_metrics ────────────────────────────────────────────────────
-        var metric = await db.CourseMetrics
-            .FirstOrDefaultAsync(m => m.CourseId == courseId);
-        bool isNewCourse = metric == null;
+        var metrica = await baseDatos.MetricasCurso
+            .FirstOrDefaultAsync(m => m.IdCurso == idCurso);
+        bool esCursoNuevo = metrica == null;
 
-        if (metric == null)
+        if (metrica == null)
         {
-            metric = new CourseMetric
+            metrica = new MetricaCurso
             {
-                CourseId    = courseId,
-                CourseTitle = msg.CourseTitle ?? string.Empty
+                IdCurso    = idCurso,
+                TituloCurso = mensaje.CourseTitle ?? string.Empty
             };
-            db.CourseMetrics.Add(metric);
+            baseDatos.MetricasCurso.Add(metrica);
         }
 
-        metric.TotalEnrollments++;
-        metric.UpdatedAt = DateTime.UtcNow;
+        metrica.TotalInscripciones++;
+        metrica.ActualizadoEn = DateTime.UtcNow;
 
         // Si otro consumer ganó la race e insertó el mismo course_id,
         // SaveChangesAsync lanza DbUpdateException (duplicate key 23505).
         // La transacción aún no commitó nada → MassTransit reintenta limpio.
-        await db.SaveChangesAsync();
+        await baseDatos.SaveChangesAsync();
 
         // ── platform_stats (raw SQL atómico, dentro de la misma transacción) ─
         // Se ejecuta DESPUÉS del SaveChanges exitoso para no duplicar contadores.
-        int updated = await db.Database.ExecuteSqlRawAsync(
-            isNewCourse
+        int filasActualizadas = await baseDatos.Database.ExecuteSqlRawAsync(
+            esCursoNuevo
                 ? "UPDATE analytics.platform_stats " +
                   "SET total_enrollments = total_enrollments + 1, " +
                   "    total_courses = total_courses + 1, " +
@@ -93,22 +93,22 @@ public class CourseEnrolledConsumer(
                   "SET total_enrollments = total_enrollments + 1, " +
                   "    updated_at = NOW()");
 
-        if (updated == 0)
+        if (filasActualizadas == 0)
         {
             // Primer evento: todavía no hay fila en platform_stats.
             // Ocurre si analytics_db fue truncada y este enrollment llega
             // antes que un USER_REGISTERED.
-            var newStatsId = Guid.NewGuid();
-            await db.Database.ExecuteSqlRawAsync(
+            var idNuevasEstadisticas = Guid.NewGuid();
+            await baseDatos.Database.ExecuteSqlRawAsync(
                 "INSERT INTO analytics.platform_stats " +
                 "(id, total_enrollments, total_courses, updated_at) " +
                 "VALUES ({0}, 1, {1}, NOW())",
-                newStatsId, isNewCourse ? 1 : 0);
+                idNuevasEstadisticas, esCursoNuevo ? 1 : 0);
         }
 
-        await tx.CommitAsync();
+        await transaccion.CommitAsync();
         logger.LogInformation(
             "COURSE_ENROLLED procesado: CourseId={CourseId} NuevoCurso={IsNew}",
-            courseId, isNewCourse);
+            idCurso, esCursoNuevo);
     }
 }

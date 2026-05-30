@@ -8,7 +8,7 @@ namespace Puj.Analytics.Endpoints;
 ///
 /// <para>
 /// Expone el historial de fotografías mensuales generadas por
-/// <see cref="Puj.Analytics.Services.MonthlySnapshotJob"/>, ordenadas
+/// <see cref="Puj.Analytics.Services.TrabajoResumenMensual"/>, ordenadas
 /// de más reciente a más antigua. Requiere autenticación JWT.
 /// </para>
 /// </summary>
@@ -21,26 +21,26 @@ public static class MonthlySnapshotEndpoints
     /// se registra el endpoint.</param>
     public static void MapMonthlySnapshotEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/v1/analytics/monthly", async (AnalyticsDbContext db) =>
+        app.MapGet("/api/v1/analytics/monthly", async (ContextoBaseDatosAnaliticas baseDatos) =>
         {
-            var snapshots = await db.MonthlySnapshots
-                .OrderByDescending(s => s.Year)
-                .ThenByDescending(s => s.Month)
+            var resumenes = await baseDatos.ResumenesMensuales
+                .OrderByDescending(s => s.Anio)
+                .ThenByDescending(s => s.Mes)
                 .ToListAsync();
 
-            return Results.Ok(snapshots.Select(s => new {
-                s.Year,
-                s.Month,
-                s.TotalUsers,
-                s.TotalEnrollments,
-                s.TotalSubmissions,
-                s.TotalCourses,
-                AvgScore                = (double)s.AvgScore,
-                PassRate                = (double)s.PassRate,
-                s.NewUsersThisMonth,
-                s.NewEnrollmentsThisMonth,
-                s.NewSubmissionsThisMonth,
-                s.GeneratedAt
+            return Results.Ok(resumenes.Select(s => new {
+                Year                    = s.Anio,
+                Month                   = s.Mes,
+                TotalUsers              = s.TotalUsuarios,
+                TotalEnrollments        = s.TotalInscripciones,
+                TotalSubmissions        = s.TotalEntregas,
+                TotalCourses            = s.TotalCursos,
+                AvgScore                = (double)s.PuntajePromedio,
+                PassRate                = (double)s.TasaAprobacion,
+                NewUsersThisMonth       = s.UsuariosNuevosEsteMes,
+                NewEnrollmentsThisMonth = s.InscripcionesNuevasEsteMes,
+                NewSubmissionsThisMonth = s.EntregasNuevasEsteMes,
+                GeneratedAt             = s.GeneradoEn
             }));
         })
         .WithTags("Analytics")

@@ -9,8 +9,8 @@
 
     <h2 class="page-title">Foros de discusión</h2>
 
-    <!-- Create forum (INSTRUCTOR / ADMIN) -->
-    <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+    <!-- Create forum (INSTRUCTOR / ADMIN / DIRECTOR) -->
+    <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN') or sessionBean.hasRole('DIRECTOR')}">
         <div class="card" style="margin-bottom:1.5rem;">
             <h3 style="margin-bottom:1rem;color:#1a3a6b;">Crear foro</h3>
             <h:form>
@@ -23,16 +23,13 @@
                     </div>
                     <div class="form-group" style="margin:0;flex:1;min-width:220px;">
                         <label class="form-label">Curso</label>
-                        <h:inputText value="#{forumBean.courseSearch}" required="true"
-                                     styleClass="form-control" style="width:100%;"
-                                     placeholder="Escribe el nombre del curso..."
-                                     autocomplete="off"
-                                     list="courseDataList"/>
-                        <datalist id="courseDataList">
-                            <ui:repeat value="#{forumBean.courseOptions}" var="co">
-                                <option value="#{co.title}"/>
-                            </ui:repeat>
-                        </datalist>
+                        <h:selectOneMenu value="#{forumBean.selectedCourseId}" required="true"
+                                         styleClass="form-control" style="width:100%;">
+                            <f:selectItem itemLabel="-- Selecciona un curso --" itemValue=""
+                                          noSelectionOption="true"/>
+                            <f:selectItems value="#{forumBean.courseOptions}" var="co"
+                                           itemValue="#{co.id}" itemLabel="#{co.title}"/>
+                        </h:selectOneMenu>
                     </div>
                     <div style="padding-bottom:1px;">
                         <h:commandButton value="Crear foro" action="#{forumBean.createForum}"

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Puj.Analytics.Models;
 
 /// <summary>
@@ -9,70 +11,81 @@ namespace Puj.Analytics.Models;
 /// en escenarios de concurrencia.
 /// </para>
 /// </summary>
-public class PlatformStats
+public class EstadisticasPlataforma
 {
     /// <summary>
     /// Identificador único del registro singleton.
     /// </summary>
+    [JsonPropertyName("id")]
     public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>
     /// Total acumulado de usuarios registrados en la plataforma.
     /// </summary>
-    public long TotalUsers { get; set; }
+    [JsonPropertyName("totalUsers")]
+    public long TotalUsuarios { get; set; }
 
     /// <summary>
     /// Total acumulado de inscripciones a cursos en la plataforma.
     /// </summary>
-    public long TotalEnrollments { get; set; }
+    [JsonPropertyName("totalEnrollments")]
+    public long TotalInscripciones { get; set; }
 
     /// <summary>
     /// Total acumulado de entregas de evaluaciones en la plataforma.
     /// </summary>
-    public long TotalSubmissions { get; set; }
+    [JsonPropertyName("totalSubmissions")]
+    public long TotalEntregas { get; set; }
 
     /// <summary>
     /// Número de cursos distintos con al menos una inscripción.
     /// </summary>
-    public long TotalCourses { get; set; }
+    [JsonPropertyName("totalCourses")]
+    public long TotalCursos { get; set; }
 
     /// <summary>
     /// Suma acumulada de puntajes obtenidos en todas las evaluaciones.
     /// </summary>
-    public decimal RawScoreSum { get; set; }
+    [JsonPropertyName("rawScoreSum")]
+    public decimal SumaPuntajesBrutos { get; set; }
 
     /// <summary>
     /// Suma acumulada de puntajes máximos posibles en todas las evaluaciones.
     /// </summary>
-    public decimal RawMaxScoreSum { get; set; }
+    [JsonPropertyName("rawMaxScoreSum")]
+    public decimal SumaMaxPuntajesBrutos { get; set; }
 
     /// <summary>
     /// Número total de entregas con resultado aprobatorio.
     /// </summary>
-    public long PassCount { get; set; }
+    [JsonPropertyName("passCount")]
+    public long ConteoAprobados { get; set; }
 
     /// <summary>
     /// Fecha y hora (UTC) de la última modificación del registro.
     /// </summary>
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    [JsonPropertyName("updatedAt")]
+    public DateTime ActualizadoEn { get; set; } = DateTime.UtcNow;
 
     /// <summary>
     /// Promedio de puntajes en porcentaje, calculado como
-    /// <c>RawScoreSum / RawMaxScoreSum * 100</c>.
-    /// Retorna <c>0</c> si <see cref="RawMaxScoreSum"/> es cero.
+    /// <c>SumaPuntajesBrutos / SumaMaxPuntajesBrutos * 100</c>.
+    /// Retorna <c>0</c> si <see cref="SumaMaxPuntajesBrutos"/> es cero.
     /// </summary>
-    public decimal AvgScore
-        => RawMaxScoreSum > 0
-            ? Math.Round(RawScoreSum / RawMaxScoreSum * 100, 2)
+    [JsonPropertyName("avgScore")]
+    public decimal PuntajePromedio
+        => SumaMaxPuntajesBrutos > 0
+            ? Math.Round(SumaPuntajesBrutos / SumaMaxPuntajesBrutos * 100, 2)
             : 0m;
 
     /// <summary>
     /// Tasa de aprobación en porcentaje, calculada como
-    /// <c>PassCount / TotalSubmissions * 100</c>.
+    /// <c>ConteoAprobados / TotalEntregas * 100</c>.
     /// Retorna <c>0</c> si no hay entregas.
     /// </summary>
-    public decimal PassRate
-        => TotalSubmissions > 0
-            ? Math.Round((decimal)PassCount * 100 / TotalSubmissions, 2)
+    [JsonPropertyName("passRate")]
+    public decimal TasaAprobacion
+        => TotalEntregas > 0
+            ? Math.Round((decimal)ConteoAprobados * 100 / TotalEntregas, 2)
             : 0m;
 }

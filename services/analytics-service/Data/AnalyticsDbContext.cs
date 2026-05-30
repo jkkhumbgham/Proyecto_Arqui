@@ -13,124 +13,124 @@ namespace Puj.Analytics.Data;
 /// <c>analytics</c> de PostgreSQL.
 /// </para>
 /// </summary>
-/// <param name="options">
+/// <param name="opciones">
 /// Opciones de configuración del contexto inyectadas por el contenedor DI.
 /// </param>
-public class AnalyticsDbContext(DbContextOptions<AnalyticsDbContext> options)
-    : DbContext(options)
+public class ContextoBaseDatosAnaliticas(DbContextOptions<ContextoBaseDatosAnaliticas> opciones)
+    : DbContext(opciones)
 {
     /// <summary>
     /// Singleton de estadísticas globales de la plataforma.
     /// </summary>
-    public DbSet<PlatformStats> PlatformStats { get; set; }
+    public DbSet<EstadisticasPlataforma> EstadisticasPlataforma { get; set; }
 
     /// <summary>
     /// Caché local con nombre, correo y rol de cada usuario registrado.
     /// </summary>
-    public DbSet<StudentNameCache> StudentNameCaches { get; set; }
+    public DbSet<CacheNombreEstudiante> CachesNombreEstudiante { get; set; }
 
     /// <summary>
     /// Métricas agregadas por curso (inscripciones, entregas, puntajes).
     /// </summary>
-    public DbSet<CourseMetric> CourseMetrics { get; set; }
+    public DbSet<MetricaCurso> MetricasCurso { get; set; }
 
     /// <summary>
     /// Fotografías mensuales de las estadísticas globales de la plataforma.
     /// </summary>
-    public DbSet<MonthlySnapshot> MonthlySnapshots { get; set; }
+    public DbSet<ResumenMensual> ResumenesMensuales { get; set; }
 
     /// <summary>
     /// Configura el mapeo objeto-relacional de todas las entidades del servicio.
     /// </summary>
-    /// <param name="modelBuilder">Constructor del modelo EF Core.</param>
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    /// <param name="constructorModelo">Constructor del modelo EF Core.</param>
+    protected override void OnModelCreating(ModelBuilder constructorModelo)
     {
-        modelBuilder.HasDefaultSchema("analytics");
+        constructorModelo.HasDefaultSchema("analytics");
 
-        modelBuilder.Entity<PlatformStats>(e => {
+        constructorModelo.Entity<EstadisticasPlataforma>(e => {
             e.ToTable("platform_stats");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.TotalUsers).HasColumnName("total_users");
-            e.Property(x => x.TotalEnrollments).HasColumnName("total_enrollments");
-            e.Property(x => x.TotalSubmissions).HasColumnName("total_submissions");
-            e.Property(x => x.TotalCourses).HasColumnName("total_courses");
-            e.Property(x => x.RawScoreSum)
+            e.Property(x => x.TotalUsuarios).HasColumnName("total_users");
+            e.Property(x => x.TotalInscripciones).HasColumnName("total_enrollments");
+            e.Property(x => x.TotalEntregas).HasColumnName("total_submissions");
+            e.Property(x => x.TotalCursos).HasColumnName("total_courses");
+            e.Property(x => x.SumaPuntajesBrutos)
                 .HasColumnName("raw_score_sum")
                 .HasPrecision(14, 4);
-            e.Property(x => x.RawMaxScoreSum)
+            e.Property(x => x.SumaMaxPuntajesBrutos)
                 .HasColumnName("raw_max_score_sum")
                 .HasPrecision(14, 4);
-            e.Property(x => x.PassCount).HasColumnName("pass_count");
-            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
-            e.Ignore(x => x.AvgScore);
-            e.Ignore(x => x.PassRate);
+            e.Property(x => x.ConteoAprobados).HasColumnName("pass_count");
+            e.Property(x => x.ActualizadoEn).HasColumnName("updated_at");
+            e.Ignore(x => x.PuntajePromedio);
+            e.Ignore(x => x.TasaAprobacion);
         });
 
-        modelBuilder.Entity<StudentNameCache>(e => {
+        constructorModelo.Entity<CacheNombreEstudiante>(e => {
             e.ToTable("student_name_cache");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.UserId).HasColumnName("user_id");
-            e.Property(x => x.StudentName)
+            e.Property(x => x.IdUsuario).HasColumnName("user_id");
+            e.Property(x => x.NombreEstudiante)
                 .HasColumnName("student_name")
                 .HasMaxLength(200);
-            e.Property(x => x.Email)
+            e.Property(x => x.Correo)
                 .HasColumnName("email")
                 .HasMaxLength(200);
-            e.Property(x => x.Role)
+            e.Property(x => x.Rol)
                 .HasColumnName("role")
                 .HasMaxLength(50);
-            e.Property(x => x.LastLoginAt).HasColumnName("last_login_at");
-            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
-            e.HasIndex(x => x.UserId).IsUnique();
+            e.Property(x => x.UltimoAccesoEn).HasColumnName("last_login_at");
+            e.Property(x => x.ActualizadoEn).HasColumnName("updated_at");
+            e.HasIndex(x => x.IdUsuario).IsUnique();
         });
 
-        modelBuilder.Entity<CourseMetric>(e => {
+        constructorModelo.Entity<MetricaCurso>(e => {
             e.ToTable("course_metrics");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.CourseId).HasColumnName("course_id");
-            e.Property(x => x.CourseTitle).HasColumnName("course_title");
-            e.Property(x => x.TotalEnrollments).HasColumnName("total_enrollments");
-            e.Property(x => x.TotalSubmissions).HasColumnName("total_submissions");
-            e.Property(x => x.RawScoreSum)
+            e.Property(x => x.IdCurso).HasColumnName("course_id");
+            e.Property(x => x.TituloCurso).HasColumnName("course_title");
+            e.Property(x => x.TotalInscripciones).HasColumnName("total_enrollments");
+            e.Property(x => x.TotalEntregas).HasColumnName("total_submissions");
+            e.Property(x => x.SumaPuntajesBrutos)
                 .HasColumnName("raw_score_sum")
                 .HasPrecision(14, 4);
-            e.Property(x => x.RawMaxScoreSum)
+            e.Property(x => x.SumaMaxPuntajesBrutos)
                 .HasColumnName("raw_max_score_sum")
                 .HasPrecision(14, 4);
-            e.Property(x => x.PassCount).HasColumnName("pass_count");
-            e.Property(x => x.UpdatedAt).HasColumnName("updated_at");
-            e.HasIndex(x => x.CourseId).IsUnique();
-            e.Ignore(x => x.AverageScore);
-            e.Ignore(x => x.PassRate);
+            e.Property(x => x.ConteoAprobados).HasColumnName("pass_count");
+            e.Property(x => x.ActualizadoEn).HasColumnName("updated_at");
+            e.HasIndex(x => x.IdCurso).IsUnique();
+            e.Ignore(x => x.PuntajePromedio);
+            e.Ignore(x => x.TasaAprobacion);
         });
 
-        modelBuilder.Entity<MonthlySnapshot>(e => {
+        constructorModelo.Entity<ResumenMensual>(e => {
             e.ToTable("monthly_snapshots");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
-            e.Property(x => x.Year).HasColumnName("year");
-            e.Property(x => x.Month).HasColumnName("month");
-            e.Property(x => x.TotalUsers).HasColumnName("total_users");
-            e.Property(x => x.TotalEnrollments).HasColumnName("total_enrollments");
-            e.Property(x => x.TotalSubmissions).HasColumnName("total_submissions");
-            e.Property(x => x.TotalCourses).HasColumnName("total_courses");
-            e.Property(x => x.AvgScore)
+            e.Property(x => x.Anio).HasColumnName("year");
+            e.Property(x => x.Mes).HasColumnName("month");
+            e.Property(x => x.TotalUsuarios).HasColumnName("total_users");
+            e.Property(x => x.TotalInscripciones).HasColumnName("total_enrollments");
+            e.Property(x => x.TotalEntregas).HasColumnName("total_submissions");
+            e.Property(x => x.TotalCursos).HasColumnName("total_courses");
+            e.Property(x => x.PuntajePromedio)
                 .HasColumnName("avg_score")
                 .HasPrecision(5, 2);
-            e.Property(x => x.PassRate)
+            e.Property(x => x.TasaAprobacion)
                 .HasColumnName("pass_rate")
                 .HasPrecision(5, 2);
-            e.Property(x => x.NewUsersThisMonth)
+            e.Property(x => x.UsuariosNuevosEsteMes)
                 .HasColumnName("new_users_this_month");
-            e.Property(x => x.NewEnrollmentsThisMonth)
+            e.Property(x => x.InscripcionesNuevasEsteMes)
                 .HasColumnName("new_enrollments_this_month");
-            e.Property(x => x.NewSubmissionsThisMonth)
+            e.Property(x => x.EntregasNuevasEsteMes)
                 .HasColumnName("new_submissions_this_month");
-            e.Property(x => x.GeneratedAt).HasColumnName("generated_at");
-            e.HasIndex(x => new { x.Year, x.Month }).IsUnique();
+            e.Property(x => x.GeneradoEn).HasColumnName("generated_at");
+            e.HasIndex(x => new { x.Anio, x.Mes }).IsUnique();
         });
     }
 }

@@ -4,85 +4,85 @@ using Puj.Analytics.Models;
 
 namespace Puj.Analytics.Services;
 
-public class MonthlySnapshotJob(
-    IServiceScopeFactory scopeFactory,
-    ILogger<MonthlySnapshotJob> logger) : BackgroundService
+public class TrabajoResumenMensual(
+    IServiceScopeFactory fabricaAlcance,
+    ILogger<TrabajoResumenMensual> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await TrySnapshotPreviousMonthAsync(stoppingToken);
+        await IntentarResumenMesAnteriorAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var delay = DelayUntilNextFirstOfMonth();
+            var demora = DemoraHastaPrimeroDelMes();
             logger.LogInformation("Próximo snapshot mensual en {Hours}h {Minutes}m.",
-                (int)delay.TotalHours, delay.Minutes);
+                (int)demora.TotalHours, demora.Minutes);
 
-            await Task.Delay(delay, stoppingToken);
-            await TrySnapshotPreviousMonthAsync(stoppingToken);
+            await Task.Delay(demora, stoppingToken);
+            await IntentarResumenMesAnteriorAsync(stoppingToken);
         }
     }
 
-    private async Task TrySnapshotPreviousMonthAsync(CancellationToken ct)
+    private async Task IntentarResumenMesAnteriorAsync(CancellationToken ct)
     {
-        var target = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc)
-                         .AddMonths(-1);
-        int year  = target.Year;
-        int month = target.Month;
+        var objetivo = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc)
+                           .AddMonths(-1);
+        int anio  = objetivo.Year;
+        int mes   = objetivo.Month;
 
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AnalyticsDbContext>();
+        using var alcance = fabricaAlcance.CreateScope();
+        var baseDatos = alcance.ServiceProvider.GetRequiredService<ContextoBaseDatosAnaliticas>();
 
-        if (await db.MonthlySnapshots.AnyAsync(s => s.Year == year && s.Month == month, ct))
+        if (await baseDatos.ResumenesMensuales.AnyAsync(s => s.Anio == anio && s.Mes == mes, ct))
         {
-            logger.LogDebug("Snapshot {Year}-{Month:D2} ya existe.", year, month);
+            logger.LogDebug("Snapshot {Year}-{Month:D2} ya existe.", anio, mes);
             return;
         }
 
-        var stats = await db.PlatformStats.FirstOrDefaultAsync(ct);
-        if (stats == null)
+        var estadisticas = await baseDatos.EstadisticasPlataforma.FirstOrDefaultAsync(ct);
+        if (estadisticas == null)
         {
             logger.LogWarning("platform_stats vacío — snapshot omitido.");
             return;
         }
 
-        var prevSnapshot = await db.MonthlySnapshots
-            .OrderByDescending(s => s.Year).ThenByDescending(s => s.Month)
+        var resumenAnterior = await baseDatos.ResumenesMensuales
+            .OrderByDescending(s => s.Anio).ThenByDescending(s => s.Mes)
             .FirstOrDefaultAsync(ct);
 
-        long newUsers       = Math.Max(0, stats.TotalUsers       - (prevSnapshot?.TotalUsers       ?? 0));
-        long newEnrollments = Math.Max(0, stats.TotalEnrollments  - (prevSnapshot?.TotalEnrollments ?? 0));
-        long newSubmissions = Math.Max(0, stats.TotalSubmissions   - (prevSnapshot?.TotalSubmissions ?? 0));
+        long usuariosNuevos       = Math.Max(0, estadisticas.TotalUsuarios       - (resumenAnterior?.TotalUsuarios       ?? 0));
+        long inscripcionesNuevas  = Math.Max(0, estadisticas.TotalInscripciones  - (resumenAnterior?.TotalInscripciones  ?? 0));
+        long entregasNuevas       = Math.Max(0, estadisticas.TotalEntregas       - (resumenAnterior?.TotalEntregas        ?? 0));
 
-        var snapshot = new MonthlySnapshot
+        var resumen = new ResumenMensual
         {
-            Year                    = year,
-            Month                   = month,
-            TotalUsers              = stats.TotalUsers,
-            TotalEnrollments        = stats.TotalEnrollments,
-            TotalSubmissions        = stats.TotalSubmissions,
-            TotalCourses            = stats.TotalCourses,
-            AvgScore                = stats.AvgScore,
-            PassRate                = stats.PassRate,
-            NewUsersThisMonth       = newUsers,
-            NewEnrollmentsThisMonth = newEnrollments,
-            NewSubmissionsThisMonth = newSubmissions,
-            GeneratedAt             = DateTime.UtcNow
+            Anio                     = anio,
+            Mes                      = mes,
+            TotalUsuarios            = estadisticas.TotalUsuarios,
+            TotalInscripciones       = estadisticas.TotalInscripciones,
+            TotalEntregas            = estadisticas.TotalEntregas,
+            TotalCursos              = estadisticas.TotalCursos,
+            PuntajePromedio          = estadisticas.PuntajePromedio,
+            TasaAprobacion           = estadisticas.TasaAprobacion,
+            UsuariosNuevosEsteMes    = usuariosNuevos,
+            InscripcionesNuevasEsteMes = inscripcionesNuevas,
+            EntregasNuevasEsteMes    = entregasNuevas,
+            GeneradoEn               = DateTime.UtcNow
         };
 
-        db.MonthlySnapshots.Add(snapshot);
-        await db.SaveChangesAsync(ct);
+        baseDatos.ResumenesMensuales.Add(resumen);
+        await baseDatos.SaveChangesAsync(ct);
 
         logger.LogInformation(
             "Snapshot mensual {Year}-{Month:D2} generado: {Users} usuarios, {Enroll} inscripciones, {Subs} entregas.",
-            year, month, stats.TotalUsers, stats.TotalEnrollments, stats.TotalSubmissions);
+            anio, mes, estadisticas.TotalUsuarios, estadisticas.TotalInscripciones, estadisticas.TotalEntregas);
     }
 
-    private static TimeSpan DelayUntilNextFirstOfMonth()
+    private static TimeSpan DemoraHastaPrimeroDelMes()
     {
-        var now  = DateTime.UtcNow;
-        var next = new DateTime(now.Year, now.Month, 1, 0, 5, 0, DateTimeKind.Utc).AddMonths(1);
-        var diff = next - now;
-        return diff > TimeSpan.Zero ? diff : TimeSpan.FromHours(24);
+        var ahora     = DateTime.UtcNow;
+        var siguiente = new DateTime(ahora.Year, ahora.Month, 1, 0, 5, 0, DateTimeKind.Utc).AddMonths(1);
+        var diferencia = siguiente - ahora;
+        return diferencia > TimeSpan.Zero ? diferencia : TimeSpan.FromHours(24);
     }
 }
