@@ -1,5 +1,25 @@
 package com.puj.users.service;
 
+import java.lang.reflect.Method;
+import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mindrot.jbcrypt.BCrypt;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+
 import com.puj.events.publisher.EventPublisher;
 import com.puj.security.blacklist.TokenBlacklistService;
 import com.puj.security.jwt.JwtClaims;
@@ -13,23 +33,9 @@ import com.puj.users.entity.RefreshToken;
 import com.puj.users.entity.User;
 import com.puj.users.repository.RefreshTokenRepository;
 import com.puj.users.repository.UserRepository;
+
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotAuthorizedException;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mindrot.jbcrypt.BCrypt;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -114,7 +120,16 @@ class AuthServiceTest {
     void login_success_returnsTokens() {
         when(userRepo.findByEmail("test@puj.edu.co")).thenReturn(Optional.of(sampleUser));
         when(jwtProvider.generateAccessToken(any(), any(), any(), any())).thenReturn("access.token.here");
-        when(refreshRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(refreshRepo.save(any(RefreshToken.class)))
+            .thenAnswer(invocation -> {
+                RefreshToken token = invocation.getArgument(0);
+
+                Method m = RefreshToken.class.getDeclaredMethod("onCreate");
+                m.setAccessible(true);
+                m.invoke(token);
+
+                return token;
+            });
         when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         LoginResponse resp = authService.login(

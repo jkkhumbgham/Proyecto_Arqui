@@ -15,19 +15,29 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Motor adaptativo determinístico. Evalúa si el score del estudiante está
- * por debajo del umbral configurado por el instructor y devuelve la recomendación
- * de contenido suplementario si aplica.
+ * Motor adaptativo determinístico del servicio de evaluaciones.
  *
- * Flujo:
- *  1. Intentar leer regla de Redis (clave: adaptive:rule:{assessmentId}, TTL 60s).
- *  2. Si Redis falla → fallback a PostgreSQL con log WARNING (E-12).
- *  3. Evaluar: score < threshold → AdaptiveRecommendation con lessonId suplementario.
+ * <p>Evalúa si el puntaje del estudiante se encuentra por debajo del umbral
+ * configurado por el instructor y devuelve una recomendación de contenido
+ * suplementario cuando corresponde.</p>
+ *
+ * <p>Flujo de resolución de la regla adaptativa:</p>
+ * <ol>
+ *   <li>Intentar leer la regla desde Redis (clave: {@code adaptive:rule:{assessmentId}},
+ *       TTL de {@value #CACHE_TTL} segundos).</li>
+ *   <li>Si Redis no está disponible, hacer fallback a PostgreSQL con log WARNING
+ *       (código de error E-12).</li>
+ *   <li>Evaluar: si {@code score < threshold} retornar un
+ *       {@link AdaptiveRecommendation} con la lección suplementaria configurada.</li>
+ * </ol>
+ *
+ * @author Plataforma PUJ
+ * @since  1.0
  */
 @ApplicationScoped
 public class AdaptiveEngine {
 
-    private static final Logger LOG       = Logger.getLogger(AdaptiveEngine.class.getName());
+    private static final Logger LOG        = Logger.getLogger(AdaptiveEngine.class.getName());
     private static final String KEY_PREFIX = "adaptive:rule:";
     private static final int    CACHE_TTL  = 60;
 
@@ -36,8 +46,24 @@ public class AdaptiveEngine {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public Optional<AdaptiveRecommendation> evaluate(UUID assessmentId, UUID userId,
-                                                      BigDecimal score, BigDecimal maxScore) {
+    /**
+     * Evalúa si el puntaje obtenido por el estudiante cae por debajo del umbral
+     * definido en la regla adaptativa asociada a la evaluación.
+     *
+     * @param assessmentId identificador de la evaluación
+     * @param userId       identificador del estudiante que realizó la evaluación
+     * @param score        puntaje bruto obtenido por el estudiante
+     * @param maxScore     puntaje máximo posible en la evaluación
+     * @return {@link Optional} con la recomendación si el puntaje está por debajo
+     *         del umbral, o {@link Optional#empty()} si el estudiante aprobó o no
+     *         existe una regla activa
+     */
+    public Optional<AdaptiveRecommendation> evaluate(
+            UUID assessmentId,
+            UUID userId,
+            BigDecimal score,
+            BigDecimal maxScore) {
+
         Optional<AdaptiveRule> ruleOpt = findRule(assessmentId);
         if (ruleOpt.isEmpty()) return Optional.empty();
 
@@ -49,10 +75,13 @@ public class AdaptiveEngine {
                 : 0.0;
 
         if (scorePct < rule.getScoreThresholdPct()) {
+            String msg = rule.getMessage() != null
+                    ? rule.getMessage()
+                    : "Tu puntaje está por debajo del umbral. "
+                    + "Te recomendamos repasar el material.";
             return Optional.of(new AdaptiveRecommendation(
                     rule.getSupplementaryLessonId(),
-                    rule.getMessage() != null ? rule.getMessage()
-                            : "Tu puntaje está por debajo del umbral. Te recomendamos repasar el material.",
+                    msg,
                     scorePct,
                     rule.getScoreThresholdPct()
             ));
@@ -61,6 +90,28 @@ public class AdaptiveEngine {
         return Optional.empty();
     }
 
+    /**
+     * Invalida la entrada en caché de Redis para la regla adaptativa de una
+     * evaluación. Se debe llamar tras crear, actualizar o eliminar una regla.
+     *
+     * @param assessmentId identificador de la evaluación cuya caché se invalida
+     */
+    public void invalidateCache(UUID assessmentId) {
+        try (Jedis jedis = redisProvider.getPool().getResource()) {
+            jedis.del(KEY_PREFIX + assessmentId);
+        } catch (Exception e) {
+            LOG.log(Level.WARNING,
+                    "No se pudo invalidar caché de regla adaptativa", e);
+        }
+    }
+
+    /**
+     * Busca la regla adaptativa activa para una evaluación, intentando primero
+     * Redis y recurriendo a PostgreSQL si Redis no está disponible.
+     *
+     * @param assessmentId identificador de la evaluación
+     * @return {@link Optional} con la regla encontrada, o vacío si no existe
+     */
     private Optional<AdaptiveRule> findRule(UUID assessmentId) {
         String cacheKey = KEY_PREFIX + assessmentId;
 
@@ -71,27 +122,30 @@ public class AdaptiveEngine {
             }
 
             Optional<AdaptiveRule> rule = ruleRepo.findByAssessment(assessmentId);
-            rule.ifPresent(r -> {
-                try {
-                    jedis.setex(cacheKey, CACHE_TTL, mapper.writeValueAsString(r));
-                } catch (Exception e) {
-                    LOG.log(Level.WARNING, "No se pudo cachear regla adaptativa en Redis", e);
-                }
-            });
+            rule.ifPresent(r -> cacheRule(jedis, cacheKey, r));
             return rule;
 
         } catch (Exception e) {
             LOG.log(Level.WARNING,
-                    "Redis no disponible — leyendo regla adaptativa desde PostgreSQL (fallback E-12)", e);
+                    "Redis no disponible — leyendo regla adaptativa desde "
+                    + "PostgreSQL (fallback E-12)", e);
             return ruleRepo.findByAssessment(assessmentId);
         }
     }
 
-    public void invalidateCache(UUID assessmentId) {
-        try (Jedis jedis = redisProvider.getPool().getResource()) {
-            jedis.del(KEY_PREFIX + assessmentId);
+    /**
+     * Serializa y almacena una regla adaptativa en Redis con el TTL configurado.
+     *
+     * @param jedis    conexión Jedis activa
+     * @param cacheKey clave Redis bajo la que se almacenará la regla
+     * @param rule     regla adaptativa a serializar y almacenar
+     */
+    private void cacheRule(Jedis jedis, String cacheKey, AdaptiveRule rule) {
+        try {
+            jedis.setex(cacheKey, CACHE_TTL, mapper.writeValueAsString(rule));
         } catch (Exception e) {
-            LOG.log(Level.WARNING, "No se pudo invalidar caché de regla adaptativa", e);
+            LOG.log(Level.WARNING,
+                    "No se pudo cachear regla adaptativa en Redis", e);
         }
     }
 }

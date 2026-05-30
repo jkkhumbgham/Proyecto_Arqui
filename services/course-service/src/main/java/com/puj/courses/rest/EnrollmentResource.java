@@ -21,6 +21,16 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.Arrays;
 
+/**
+ * Recurso REST para la gestión de inscripciones de estudiantes en cursos.
+ *
+ * <p>Expone endpoints bajo la ruta base {@code /api/v1/enrollments} para
+ * inscribirse, consultar inscripciones propias, obtener estadísticas y finalizar cursos.
+ * La autorización por rol se delega a la anotación {@link RequiresRole}.
+ *
+ * @author Plataforma PUJ
+ * @since  1.0
+ */
 @Path("/enrollments")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -31,6 +41,12 @@ public class EnrollmentResource {
     @Inject private EnrollmentRepository enrollmentRepo;
     @Inject private AuthenticatedUser    authenticatedUser;
 
+    /**
+     * Inscribe al estudiante autenticado en el curso indicado.
+     *
+     * @param  courseId identificador del curso en el que se desea inscribir
+     * @return respuesta 201 con el DTO de la inscripción creada
+     */
     @POST
     @Path("/courses/{courseId}")
     @RequiresRole(Role.STUDENT)
@@ -41,6 +57,11 @@ public class EnrollmentResource {
         return Response.status(Response.Status.CREATED).entity(enrollment).build();
     }
 
+    /**
+     * Devuelve todas las inscripciones activas del estudiante autenticado.
+     *
+     * @return lista de inscripciones del estudiante
+     */
     @GET
     @Path("/my")
     @RequiresRole(Role.STUDENT)
@@ -50,6 +71,16 @@ public class EnrollmentResource {
         return enrollmentService.findByUser(userId);
     }
 
+    /**
+     * Devuelve estadísticas de inscripción de un curso, incluyendo distribución
+     * de estudiantes por módulo más reciente completado.
+     *
+     * <p>La respuesta incluye {@code enrolledCount}, {@code avgProgressPct} y
+     * {@code moduleDistribution} (con balde "No han comenzado el curso" si aplica).
+     *
+     * @param  courseId identificador del curso
+     * @return respuesta 200 con el mapa de estadísticas
+     */
     @GET
     @Path("/course/{courseId}/stats")
     @RequiresRole({Role.INSTRUCTOR, Role.ADMIN})
@@ -58,10 +89,9 @@ public class EnrollmentResource {
         long enrolledCount    = enrollmentRepo.countByCourse(courseId);
         double avgProgressPct = enrollmentRepo.avgProgressPct(courseId);
 
-        // For each student, keep only the module of their most recent lesson completion
+        // Para cada estudiante conservar solo el módulo de su lección más reciente
         List<Object[]> rawRows = enrollmentRepo.latestModulePerUser(courseId);
 
-        // [userId] -> row with max completedAt across all modules
         Map<UUID, Object[]> latestPerUser = new LinkedHashMap<>();
         for (Object[] row : rawRows) {
             UUID    userId      = (UUID) row[0];
@@ -72,9 +102,9 @@ public class EnrollmentResource {
             }
         }
 
-        // Aggregate count per module preserving order
+        // Agregar conteo por módulo respetando el orden
         Map<String, long[]>   moduleCounts = new LinkedHashMap<>();
-        Map<String, Object[]> moduleMeta   = new LinkedHashMap<>(); // moduleId -> [title, orderIndex]
+        Map<String, Object[]> moduleMeta   = new LinkedHashMap<>();
         for (Object[] row : latestPerUser.values()) {
             String moduleId    = row[1].toString();
             String moduleTitle = row[2].toString();
@@ -84,7 +114,8 @@ public class EnrollmentResource {
         }
 
         List<Map<String, Object>> moduleDistribution = moduleCounts.entrySet().stream()
-                .sorted(Comparator.comparingInt(e -> (int) ((Object[]) moduleMeta.get(e.getKey()))[1]))
+                .sorted(Comparator.comparingInt(
+                        e -> (int) ((Object[]) moduleMeta.get(e.getKey()))[1]))
                 .map(e -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("moduleId",     e.getKey());
@@ -94,12 +125,12 @@ public class EnrollmentResource {
                 })
                 .collect(Collectors.toList());
 
-        // Prepend "no han comenzado" bucket if applicable
+        // Prepend balde "no han comenzado" si corresponde
         long notStarted = enrollmentRepo.countNotStarted(courseId);
         if (notStarted > 0) {
             Map<String, Object> ns = new LinkedHashMap<>();
-            ns.put("moduleId",    "not-started");
-            ns.put("moduleTitle", "No han comenzado el curso");
+            ns.put("moduleId",     "not-started");
+            ns.put("moduleTitle",  "No han comenzado el curso");
             ns.put("studentCount", notStarted);
             moduleDistribution.add(0, ns);
         }
@@ -112,25 +143,47 @@ public class EnrollmentResource {
         return Response.ok(result).build();
     }
 
+    /**
+     * Cuenta los estudiantes únicos inscritos en el conjunto de cursos indicado.
+     *
+     * @param  courseIdsParam lista de UUIDs separados por coma; si es vacía devuelve 0
+     * @return respuesta 200 con la clave {@code uniqueStudents}
+     */
     @GET
     @Path("/unique-students")
     @RequiresRole({Role.INSTRUCTOR, Role.ADMIN, Role.DIRECTOR})
-    @Operation(summary = "Cantidad de estudiantes únicos en un conjunto de cursos (INSTRUCTOR/ADMIN)")
+    @Operation(
+            summary = "Cantidad de estudiantes únicos en un conjunto de cursos"
+                    + " (INSTRUCTOR/ADMIN)")
     public Response uniqueStudents(@QueryParam("courseIds") String courseIdsParam) {
-        if (courseIdsParam == null || courseIdsParam.isBlank())
+        if (courseIdsParam == null || courseIdsParam.isBlank()) {
             return Response.ok(Map.of("uniqueStudents", 0L)).build();
+        }
         List<UUID> ids = Arrays.stream(courseIdsParam.split(","))
-                .map(String::trim).filter(s -> !s.isBlank())
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
                 .map(UUID::fromString)
                 .collect(Collectors.toList());
         long count = enrollmentRepo.countUniqueStudentsInCourses(ids);
         return Response.ok(Map.of("uniqueStudents", count)).build();
     }
 
+    /**
+     * Devuelve estadísticas globales de inscripciones para el panel de administración.
+     *
+     * <p>Incluye totales de inscripciones activas y completadas, así como los
+     * {@code limit} cursos más populares y con más finalizaciones.
+     *
+     * @param  limit número de cursos en cada ranking (entre 1 y 20, por defecto 5)
+     * @return respuesta 200 con {@code totalEnrollments}, {@code totalCompletedEnrollments},
+     *         {@code popularCourses} y {@code completedCourses}
+     */
     @GET
     @Path("/admin/course-stats")
     @RequiresRole({Role.ADMIN})
-    @Operation(summary = "Estadísticas globales de cursos para el panel de administración (ADMIN)")
+    @Operation(
+            summary = "Estadísticas globales de cursos para el panel de administración"
+                    + " (ADMIN)")
     public Response adminCourseStats(
             @QueryParam("limit") @DefaultValue("5") int limit) {
 
@@ -140,22 +193,26 @@ public class EnrollmentResource {
         long totalCompleted   = enrollmentRepo.countCompleted();
 
         List<Map<String, Object>> popular = enrollmentRepo.topPopularCourses(safeLimit)
-                .stream().map(row -> {
+                .stream()
+                .map(row -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("courseId",    row[0].toString());
                     m.put("courseTitle", row[1].toString());
                     m.put("enrollCount", ((Number) row[2]).longValue());
                     return m;
-                }).collect(Collectors.toList());
+                })
+                .collect(Collectors.toList());
 
         List<Map<String, Object>> completed = enrollmentRepo.topCompletedCourses(safeLimit)
-                .stream().map(row -> {
+                .stream()
+                .map(row -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("courseId",       row[0].toString());
                     m.put("courseTitle",    row[1].toString());
                     m.put("completedCount", ((Number) row[2]).longValue());
                     return m;
-                }).collect(Collectors.toList());
+                })
+                .collect(Collectors.toList());
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("totalEnrollments",          totalEnrollments);
@@ -165,6 +222,17 @@ public class EnrollmentResource {
         return Response.ok(result).build();
     }
 
+    /**
+     * Marca la inscripción del estudiante como {@code COMPLETED} si tiene el 100% de progreso.
+     *
+     * <p>Este endpoint es el único camino para transicionar una inscripción a
+     * {@code COMPLETED}; la transición automática al completar lecciones fue eliminada
+     * para requerir también la aprobación de evaluaciones.
+     *
+     * @param  courseId identificador del curso a finalizar
+     * @return respuesta 200 con {@code {"status":"COMPLETED"}} si tuvo éxito,
+     *         404 si no hay inscripción activa, o 400 si el progreso es menor al 100%
+     */
     @POST
     @Path("/courses/{courseId}/finalize")
     @Transactional
@@ -176,11 +244,13 @@ public class EnrollmentResource {
                 .orElse(null);
         if (enrollment == null) {
             return Response.status(Response.Status.NOT_FOUND)
-                    .entity(Map.of("message", "Inscripción no encontrada")).build();
+                    .entity(Map.of("message", "Inscripción no encontrada"))
+                    .build();
         }
         if (enrollment.getProgressPct() < 100.0) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("message", "El curso no está al 100% de progreso")).build();
+                    .entity(Map.of("message", "El curso no está al 100% de progreso"))
+                    .build();
         }
         enrollment.setStatus(EnrollmentStatus.COMPLETED);
         enrollment.setCompletedAt(Instant.now());
@@ -188,6 +258,12 @@ public class EnrollmentResource {
         return Response.ok(Map.of("status", "COMPLETED")).build();
     }
 
+    /**
+     * Cancela la inscripción del estudiante autenticado en el curso indicado.
+     *
+     * @param  courseId identificador del curso a cancelar
+     * @return respuesta 204 sin cuerpo
+     */
     @DELETE
     @Path("/courses/{courseId}")
     @RequiresRole(Role.STUDENT)

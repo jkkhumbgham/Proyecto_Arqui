@@ -8,6 +8,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Hilo de discusión dentro de un foro de la plataforma.
+ *
+ * <p>Cada hilo tiene un primer post creado automáticamente con el contenido
+ * inicial del autor. Los moderadores (instructor/admin) pueden fijar ({@code pinned})
+ * o bloquear ({@code locked}) hilos. Los hilos bloqueados no aceptan nuevas
+ * respuestas. El borrado es lógico.</p>
+ *
+ * @author Plataforma PUJ
+ * @since  1.0
+ */
 @Entity
 @Table(name = "threads", schema = "collaboration")
 public class Thread {
@@ -25,16 +36,21 @@ public class Thread {
     @Column(name = "title", nullable = false, length = 300)
     private String title;
 
+    /** Identificador del usuario que abrió el hilo. */
     @Column(name = "author_id", nullable = false)
     private UUID authorId;
 
+    /** {@code true} si el hilo aparece fijado al tope del listado del foro. */
     @Column(name = "pinned", nullable = false)
     private boolean pinned = false;
 
+    /** {@code true} si el hilo está bloqueado y no acepta nuevas respuestas. */
     @Column(name = "locked", nullable = false)
     private boolean locked = false;
 
-    @OneToMany(mappedBy = "thread", cascade = CascadeType.ALL, orphanRemoval = true,
+    @OneToMany(mappedBy = "thread",
+               cascade = CascadeType.ALL,
+               orphanRemoval = true,
                fetch = FetchType.LAZY)
     @OrderBy("createdAt ASC")
     private List<Post> posts = new ArrayList<>();
@@ -45,28 +61,86 @@ public class Thread {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    /**
+     * Genera el UUID y establece la marca de tiempo de creación al persistir.
+     */
     @PrePersist
     void onCreate() {
         if (id == null) id = UUID.randomUUID();
         createdAt = Instant.now();
     }
 
+    /**
+     * Indica si el hilo ha sido eliminado de forma lógica.
+     *
+     * @return {@code true} si {@code deletedAt} tiene valor
+     */
     public boolean isDeleted() { return deletedAt != null; }
+
+    /**
+     * Marca el hilo como eliminado de forma lógica.
+     */
     public void softDelete()   { this.deletedAt = Instant.now(); }
 
-    public UUID       getId()       { return id; }
-    public Forum      getForum()    { return forum; }
-    public String     getTitle()    { return title; }
-    public UUID       getAuthorId() { return authorId; }
-    public boolean    isPinned()    { return pinned; }
-    public boolean    isLocked()    { return locked; }
-    public List<Post> getPosts()    { return posts; }
-    public Instant    getCreatedAt(){ return createdAt; }
-    public Instant    getDeletedAt(){ return deletedAt; }
+    /** @return identificador único del hilo */
+    public UUID       getId()        { return id; }
 
-    public void setForum(Forum forum)    { this.forum = forum; }
-    public void setTitle(String title)   { this.title = title; }
-    public void setAuthorId(UUID a)      { this.authorId = a; }
-    public void setPinned(boolean p)     { this.pinned = p; }
-    public void setLocked(boolean l)     { this.locked = l; }
+    /** @return foro al que pertenece el hilo */
+    public Forum      getForum()     { return forum; }
+
+    /** @return título del hilo */
+    public String     getTitle()     { return title; }
+
+    /** @return identificador del autor que abrió el hilo */
+    public UUID       getAuthorId()  { return authorId; }
+
+    /** @return {@code true} si el hilo está fijado al tope del foro */
+    public boolean    isPinned()     { return pinned; }
+
+    /** @return {@code true} si el hilo está bloqueado para nuevas respuestas */
+    public boolean    isLocked()     { return locked; }
+
+    /** @return lista de posts del hilo, ordenados por fecha de creación ascendente */
+    public List<Post> getPosts()     { return posts; }
+
+    /** @return instante de creación del hilo */
+    public Instant    getCreatedAt() { return createdAt; }
+
+    /** @return instante de eliminación lógica, o {@code null} si está activo */
+    public Instant    getDeletedAt() { return deletedAt; }
+
+    /**
+     * Establece el foro propietario del hilo.
+     *
+     * @param forum foro al que pertenece
+     */
+    public void setForum(Forum forum)  { this.forum = forum; }
+
+    /**
+     * Establece el título del hilo.
+     *
+     * @param title título no nulo ni en blanco (máx. 300 caracteres)
+     */
+    public void setTitle(String title) { this.title = title; }
+
+    /**
+     * Establece el identificador del autor del hilo.
+     *
+     * @param a UUID del usuario que abrió el hilo
+     */
+    public void setAuthorId(UUID a)    { this.authorId = a; }
+
+    /**
+     * Fija o desfija el hilo al tope del listado del foro.
+     *
+     * @param p {@code true} para fijar el hilo
+     */
+    public void setPinned(boolean p)   { this.pinned = p; }
+
+    /**
+     * Bloquea o desbloquea el hilo para nuevas respuestas.
+     *
+     * @param l {@code true} para bloquear el hilo
+     */
+    public void setLocked(boolean l)   { this.locked = l; }
 }

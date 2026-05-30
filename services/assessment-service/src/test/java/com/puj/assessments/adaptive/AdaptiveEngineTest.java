@@ -20,6 +20,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+/**
+ * Pruebas unitarias del motor adaptativo {@link AdaptiveEngine}.
+ *
+ * <p>Cubre los escenarios principales: puntaje por debajo del umbral,
+ * puntaje sobre el umbral, ausencia de regla y fallback a base de datos
+ * cuando Redis no está disponible.</p>
+ *
+ * @author Plataforma PUJ
+ * @since  1.0
+ */
 @ExtendWith(MockitoExtension.class)
 class AdaptiveEngineTest {
 
@@ -35,6 +45,9 @@ class AdaptiveEngineTest {
     private UUID userId;
     private AdaptiveRule rule;
 
+    /**
+     * Configura los mocks y la regla adaptativa de prueba antes de cada test.
+     */
     @BeforeEach
     void setUp() {
         assessmentId = UUID.randomUUID();
@@ -55,6 +68,10 @@ class AdaptiveEngineTest {
         doNothing().when(jedis).close();
     }
 
+    /**
+     * Verifica que se retorna una recomendación cuando el puntaje está por
+     * debajo del umbral configurado.
+     */
     @Test
     void evaluate_scoreBelow_returnsRecommendation() {
         when(ruleRepo.findByAssessment(assessmentId)).thenReturn(Optional.of(rule));
@@ -69,6 +86,9 @@ class AdaptiveEngineTest {
         assertThat(result.get().requiredScorePct()).isEqualTo(60.0);
     }
 
+    /**
+     * Verifica que se retorna vacío cuando el puntaje supera el umbral.
+     */
     @Test
     void evaluate_scoreAbove_returnsEmpty() {
         when(ruleRepo.findByAssessment(assessmentId)).thenReturn(Optional.of(rule));
@@ -81,6 +101,9 @@ class AdaptiveEngineTest {
         assertThat(result).isEmpty();
     }
 
+    /**
+     * Verifica que se retorna vacío cuando no existe una regla adaptativa activa.
+     */
     @Test
     void evaluate_noRule_returnsEmpty() {
         when(ruleRepo.findByAssessment(assessmentId)).thenReturn(Optional.empty());
@@ -93,6 +116,10 @@ class AdaptiveEngineTest {
         assertThat(result).isEmpty();
     }
 
+    /**
+     * Verifica que cuando Redis lanza una excepción, el motor cae en fallback
+     * a la base de datos y retorna la recomendación correctamente.
+     */
     @Test
     void evaluate_redisFails_fallbackToDb() {
         when(jedis.get(anyString())).thenThrow(new RuntimeException("Redis timeout"));
@@ -107,6 +134,15 @@ class AdaptiveEngineTest {
         verify(ruleRepo, times(1)).findByAssessment(assessmentId);
     }
 
+    /**
+     * Establece un campo privado por reflexión para configurar el estado del
+     * objeto bajo prueba.
+     *
+     * @param target objeto sobre el que se establece el campo
+     * @param name   nombre del campo a modificar
+     * @param value  valor a asignar al campo
+     * @throws RuntimeException si el campo no existe o no es accesible
+     */
     private void setField(Object target, String name, Object value) {
         try {
             var f = target.getClass().getDeclaredField(name);

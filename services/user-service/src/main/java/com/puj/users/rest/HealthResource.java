@@ -14,6 +14,25 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Recurso JAX-RS de salud del servicio de usuarios.
+ *
+ * <p>Expone dos sondas estándar de Kubernetes:
+ * <ul>
+ *   <li><strong>Liveness</strong> ({@code GET /health/live}) — indica que el
+ *       proceso está vivo. Nunca verifica dependencias externas para evitar
+ *       reinicios en cascada.</li>
+ *   <li><strong>Readiness</strong> ({@code GET /health/ready}) — verifica que
+ *       RabbitMQ y Redis están accesibles. Devuelve 503 si alguna dependencia
+ *       no responde.</li>
+ * </ul>
+ *
+ * <p>El endpoint {@code GET /health} (sin sufijo) es un alias de readiness
+ * mantenido por compatibilidad retroactiva.
+ *
+ * @author Plataforma PUJ
+ * @since 1.0
+ */
 @Path("/health")
 @Produces(MediaType.APPLICATION_JSON)
 public class HealthResource {
@@ -21,14 +40,28 @@ public class HealthResource {
     @Inject private RabbitMQConnectionProvider rabbitMQ;
     @Inject private RedisClientProvider        redis;
 
-    /** Liveness: el proceso está vivo. Nunca verifica dependencias externas. */
+    /**
+     * Sonda de liveness: confirma que el proceso está en ejecución.
+     *
+     * <p>Siempre devuelve HTTP 200 mientras el proceso esté activo.
+     *
+     * @return respuesta HTTP 200 con estado {@code "UP"} y nombre del servicio.
+     */
     @GET
     @Path("/live")
     public Response live() {
-        return Response.ok(Map.of("status", "UP", "service", "user-service")).build();
+        return Response.ok(
+                Map.of("status", "UP", "service", "user-service")).build();
     }
 
-    /** Readiness: el servicio está listo para recibir tráfico (dependencias OK). */
+    /**
+     * Sonda de readiness: verifica la disponibilidad de RabbitMQ y Redis.
+     *
+     * <p>Devuelve HTTP 200 cuando ambas dependencias responden correctamente,
+     * o HTTP 503 ({@code "DEGRADED"}) cuando al menos una falla.
+     *
+     * @return respuesta con el estado de cada dependencia y la marca de tiempo.
+     */
     @GET
     @Path("/ready")
     public Response ready() {
@@ -42,14 +75,30 @@ public class HealthResource {
         body.put("rabbitMQ",  mqOk);
         body.put("redis",     redisOk);
 
-        int status = mqOk && redisOk ? 200 : 503;
-        return Response.status(status).entity(body).build();
+        int httpStatus = mqOk && redisOk ? 200 : 503;
+        return Response.status(httpStatus).entity(body).build();
     }
 
-    /** Retrocompatibilidad: redirige al endpoint ready. */
+    /**
+     * Alias del endpoint de readiness mantenido por compatibilidad retroactiva.
+     *
+     * @return misma respuesta que {@link #ready()}.
+     */
     @GET
-    public Response health() { return ready(); }
+    public Response health() {
+        return ready();
+    }
 
+    // =========================================================================
+    // Private helpers
+    // =========================================================================
+
+    /**
+     * Verifica la conectividad con Redis enviando un comando PING.
+     *
+     * @return {@code true} si Redis responde con {@code "PONG"};
+     *         {@code false} si la conexión falla o el pool no está disponible.
+     */
     private boolean checkRedis() {
         try (Jedis jedis = redis.getPool().getResource()) {
             return "PONG".equals(jedis.ping());

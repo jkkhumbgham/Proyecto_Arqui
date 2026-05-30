@@ -18,6 +18,16 @@ import jakarta.ws.rs.NotFoundException;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Servicio de negocio para la gestión de inscripciones de estudiantes en cursos.
+ *
+ * <p>Aplica las reglas de negocio de inscripción (curso publicado, sin duplicados,
+ * cupo disponible) y publica eventos de análisis mediante {@link EventPublisher}
+ * cuando se producen cambios relevantes.
+ *
+ * @author Plataforma PUJ
+ * @since  1.0
+ */
 @ApplicationScoped
 public class EnrollmentService {
 
@@ -25,6 +35,18 @@ public class EnrollmentService {
     @Inject private CourseRepository     courseRepo;
     @Inject private EventPublisher       eventPublisher;
 
+    /**
+     * Inscribe a un estudiante en un curso, validando disponibilidad y unicidad.
+     *
+     * <p>Publica un {@link CourseEnrolledEvent} al completar la inscripción exitosamente.
+     *
+     * @param  userId   identificador del estudiante
+     * @param  courseId identificador del curso
+     * @return DTO de la inscripción creada
+     * @throws NotFoundException   si el curso no existe
+     * @throws BadRequestException si el curso no está publicado, el estudiante ya
+     *                             está inscrito o el curso alcanzó su capacidad máxima
+     */
     @Transactional
     public EnrollmentResponse enroll(UUID userId, UUID courseId) {
         Course course = courseRepo.findById(courseId)
@@ -48,13 +70,21 @@ public class EnrollmentService {
         enrollmentRepo.save(enrollment);
 
         eventPublisher.publishAnalytics(new CourseEnrolledEvent(
-                enrollment.getId().toString(), userId.toString(),
-                courseId.toString(), course.getTitle()
+                enrollment.getId().toString(),
+                userId.toString(),
+                courseId.toString(),
+                course.getTitle()
         ));
 
         return EnrollmentResponse.from(enrollment);
     }
 
+    /**
+     * Devuelve todas las inscripciones activas de un estudiante.
+     *
+     * @param  userId identificador del estudiante
+     * @return lista de inscripciones del estudiante proyectadas como {@link EnrollmentResponse}
+     */
     @Transactional
     public List<EnrollmentResponse> findByUser(UUID userId) {
         return enrollmentRepo.findByUser(userId).stream()
@@ -62,6 +92,13 @@ public class EnrollmentService {
                 .toList();
     }
 
+    /**
+     * Cancela la inscripción de un estudiante en un curso realizando borrado lógico.
+     *
+     * @param  userId   identificador del estudiante
+     * @param  courseId identificador del curso
+     * @throws NotFoundException si no existe inscripción activa del usuario en el curso
+     */
     @Transactional
     public void cancel(UUID userId, UUID courseId) {
         Enrollment enrollment = enrollmentRepo.findByUserAndCourse(userId, courseId)
@@ -71,6 +108,18 @@ public class EnrollmentService {
         enrollmentRepo.merge(enrollment);
     }
 
+    /**
+     * Actualiza el porcentaje de progreso de una inscripción.
+     *
+     * <p>Si el progreso alcanza el 100%, la inscripción pasa automáticamente a
+     * estado {@code COMPLETED} y se registra {@code completedAt}.
+     *
+     * @param  userId      identificador del estudiante
+     * @param  courseId    identificador del curso
+     * @param  progressPct nuevo porcentaje de progreso (se normaliza al rango 0.0–100.0)
+     * @return DTO de la inscripción actualizada
+     * @throws NotFoundException si no existe inscripción activa del usuario en el curso
+     */
     @Transactional
     public EnrollmentResponse updateProgress(UUID userId, UUID courseId, double progressPct) {
         Enrollment enrollment = enrollmentRepo.findByUserAndCourse(userId, courseId)
