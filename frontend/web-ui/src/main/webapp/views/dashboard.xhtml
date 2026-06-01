@@ -20,6 +20,10 @@
                 <div class="stat-label">Inscripciones totales</div>
             </div>
             <div class="stat-card">
+                <div class="stat-value">#{dashboardBean.totalCompletedEnrollments}</div>
+                <div class="stat-label">Completados</div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-value">#{dashboardBean.totalCourses}</div>
                 <div class="stat-label">Cursos activos</div>
             </div>
@@ -29,20 +33,67 @@
             </div>
         </div>
 
-        <div class="card" style="margin-bottom:1.5rem;">
-            <h3 style="margin-bottom:1rem;color:#1a3a6b;">Cursos más populares</h3>
-            <table class="data-table">
-                <thead><tr><th>Curso</th><th>Inscripciones</th><th>Promedio</th></tr></thead>
-                <tbody>
-                    <ui:repeat value="#{dashboardBean.topCourses}" var="tc">
+        <!-- Tablas lado a lado: populares + completados -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem;">
+            <div class="card">
+                <h3 style="color:#1a3a6b;margin-top:0;display:flex;align-items:center;gap:.5rem;">
+                    🔥 Cursos más populares
+                    <span style="font-size:.75rem;color:#888;font-weight:normal;">(por inscripciones)</span>
+                </h3>
+                <table class="data-table">
+                    <thead>
                         <tr>
-                            <td>#{tc.title}</td>
-                            <td>#{tc.enrollments}</td>
-                            <td>#{tc.avgScore}%</td>
+                            <th>#</th>
+                            <th>Curso</th>
+                            <th style="text-align:right;">Inscripciones</th>
                         </tr>
-                    </ui:repeat>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        <ui:repeat value="#{dashboardBean.popularCourseStats}" var="c" varStatus="vs">
+                            <tr>
+                                <td style="color:#888;font-size:.8rem;width:2rem;">#{vs.index + 1}</td>
+                                <td style="font-size:.875rem;font-weight:500;">#{c.courseTitle}</td>
+                                <td style="text-align:right;">
+                                    <span class="badge badge-blue" style="font-size:.8rem;">#{c.count}</span>
+                                </td>
+                            </tr>
+                        </ui:repeat>
+                    </tbody>
+                </table>
+                <h:panelGroup rendered="#{empty dashboardBean.popularCourseStats}">
+                    <p style="text-align:center;color:#888;padding:.75rem;">Sin datos aún.</p>
+                </h:panelGroup>
+            </div>
+
+            <div class="card">
+                <h3 style="color:#1a3a6b;margin-top:0;display:flex;align-items:center;gap:.5rem;">
+                    🏆 Cursos más completados
+                    <span style="font-size:.75rem;color:#888;font-weight:normal;">(estudiantes al 100%)</span>
+                </h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Curso</th>
+                            <th style="text-align:right;">Completados</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <ui:repeat value="#{dashboardBean.completedCourseStats}" var="c" varStatus="vs">
+                            <tr>
+                                <td style="color:#888;font-size:.8rem;width:2rem;">#{vs.index + 1}</td>
+                                <td style="font-size:.875rem;font-weight:500;">#{c.courseTitle}</td>
+                                <td style="text-align:right;">
+                                    <span class="badge badge-green" style="font-size:.8rem;">#{c.count}</span>
+                                </td>
+                            </tr>
+                        </ui:repeat>
+                    </tbody>
+                </table>
+                <h:panelGroup rendered="#{empty dashboardBean.completedCourseStats}">
+                    <p style="text-align:center;color:#888;padding:.75rem;">Sin datos aún.</p>
+                </h:panelGroup>
+            </div>
         </div>
 
         <h:panelGroup rendered="#{not empty dashboardBean.inactiveUsers}">

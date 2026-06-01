@@ -1,17 +1,13 @@
 package com.puj.ui.bean;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.puj.ui.service.ApiClientService;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,10 +18,8 @@ public class SearchBean {
     private static final String COURSE_URL =
             System.getenv().getOrDefault("COURSE_SERVICE_URL", "http://course-service:8080");
 
-    @Inject private SessionBean session;
-
-    private final HttpClient   http   = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-    private final ObjectMapper mapper = new ObjectMapper();
+    @Inject private SessionBean      session;
+    @Inject private ApiClientService api;
 
     public static class SearchResult {
         private final String id, title, description, category, coverUrl;
@@ -41,15 +35,15 @@ public class SearchBean {
         public String getCoverUrl()    { return coverUrl; }
     }
 
-    private String       q        = "";
-    private String       category = "";
-    private String       sort     = "newest";
-    private int          page     = 0;
-    private int          size     = 12;
-    private long         total    = 0;
-    private int          totalPages = 0;
-    private List<SearchResult> results = new ArrayList<>();
-    private boolean      searched = false;
+    private String            q          = "";
+    private String            category   = "";
+    private String            sort       = "newest";
+    private int               page       = 0;
+    private int               size       = 12;
+    private long              total      = 0;
+    private int               totalPages = 0;
+    private List<SearchResult> results   = new ArrayList<>();
+    private boolean           searched   = false;
 
     @PostConstruct
     public void load() {
@@ -80,12 +74,9 @@ public class SearchBean {
                     + "&sort=" + sort
                     + "&page=" + page
                     + "&size=" + size;
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .GET().timeout(Duration.ofSeconds(5)).build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = api.getPublic(url);
             if (resp.statusCode() == 200) {
-                JsonNode root = mapper.readTree(resp.body());
+                JsonNode root = api.readTree(resp.body());
                 total      = root.path("total").asLong();
                 totalPages = root.path("totalPages").asInt();
                 root.path("data").forEach(n -> results.add(new SearchResult(
@@ -107,9 +98,9 @@ public class SearchBean {
     public String  getQ()          { return q; }
     public void    setQ(String q)  { this.q = q; }
     public String  getCategory()   { return category; }
-    public void    setCategory(String c){ this.category = c; }
+    public void    setCategory(String c) { this.category = c; }
     public String  getSort()       { return sort; }
-    public void    setSort(String s){ this.sort = s; }
+    public void    setSort(String s) { this.sort = s; }
     public int     getPage()       { return page; }
     public void    setPage(int p)  { this.page = p; }
     public long    getTotal()      { return total; }

@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  namespace: puj-platform
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: minio/mc:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until mc alias set myminio http://minio:9000 puj_minio puj_minio_secret; do
+                echo "Esperando MinIO..."; sleep 3
+              done
+              mc mb --ignore-existing myminio/course-files
+              mc anonymous set download myminio/course-files
+              echo "Bucket course-files listo."

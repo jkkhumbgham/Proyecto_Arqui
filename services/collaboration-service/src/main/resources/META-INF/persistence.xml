@@ -2,13 +2,12 @@
 <persistence xmlns="https://jakarta.ee/xml/ns/persistence" version="3.1">
     <persistence-unit name="CollaborationServicePU" transaction-type="JTA">
         <jta-data-source>java:jboss/datasources/CollaborationServiceDS</jta-data-source>
-        <class>com.puj.collaboration.entity.Forum</class>
-        <class>com.puj.collaboration.entity.Thread</class>
-        <class>com.puj.collaboration.entity.Post</class>
-        <class>com.puj.collaboration.entity.StudyGroup</class>
-        <class>com.puj.collaboration.entity.GroupMember</class>
-        <class>com.puj.collaboration.entity.ChatMessage</class>
-        <class>com.puj.collaboration.entity.Notification</class>
+        <class>com.puj.colaboracion.foros.dominio.Foro</class>
+        <class>com.puj.colaboracion.foros.dominio.Hilo</class>
+        <class>com.puj.colaboracion.foros.dominio.Publicacion</class>
+        <class>com.puj.colaboracion.gruposestudio.dominio.GrupoEstudio</class>
+        <class>com.puj.colaboracion.gruposestudio.dominio.MiembroGrupo</class>
+        <class>com.puj.colaboracion.gruposestudio.dominio.MensajeChat</class>
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
         <properties>
             <property name="jakarta.persistence.schema-generation.database.action" value="update"/>

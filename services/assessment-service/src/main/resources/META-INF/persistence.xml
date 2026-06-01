@@ -2,11 +2,11 @@
 <persistence xmlns="https://jakarta.ee/xml/ns/persistence" version="3.1">
     <persistence-unit name="AssessmentServicePU" transaction-type="JTA">
         <jta-data-source>java:jboss/datasources/AssessmentServiceDS</jta-data-source>
-        <class>com.puj.assessments.entity.Assessment</class>
-        <class>com.puj.assessments.entity.Question</class>
-        <class>com.puj.assessments.entity.AnswerOption</class>
-        <class>com.puj.assessments.entity.Submission</class>
-        <class>com.puj.assessments.entity.AdaptiveRule</class>
+        <class>com.puj.evaluaciones.evaluaciones.dominio.Evaluacion</class>
+        <class>com.puj.evaluaciones.evaluaciones.dominio.Pregunta</class>
+        <class>com.puj.evaluaciones.evaluaciones.dominio.OpcionRespuesta</class>
+        <class>com.puj.evaluaciones.entregas.dominio.Entrega</class>
+        <class>com.puj.evaluaciones.adaptativo.dominio.ReglaAdaptativa</class>
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
         <properties>
             <property name="jakarta.persistence.schema-generation.database.action" value="update"/>

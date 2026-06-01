@@ -6,86 +6,109 @@ using Puj.Analytics.Models;
 
 namespace Puj.Analytics.Consumers;
 
-public class CourseEnrolledConsumer(AnalyticsDbContext db, ILogger<CourseEnrolledConsumer> logger)
+/// <summary>
+/// Consumer de MassTransit que procesa el evento <c>COURSE_ENROLLED</c>.
+///
+/// <para>
+/// Es el único responsable de crear registros <see cref="MetricaCurso"/>
+/// e incrementar <c>total_courses</c> en <see cref="EstadisticasPlataforma"/>.
+/// Usa una transacción explícita para garantizar que tanto el INSERT/UPDATE
+/// del metric como el UPDATE de platform_stats sean atómicos; si ocurre
+/// una violación de clave única (race condition entre consumers del mismo
+/// curso), la transacción se revierte limpiamente y MassTransit reintenta.
+/// </para>
+/// </summary>
+/// <param name="baseDatos">Contexto de base de datos de analítica.</param>
+/// <param name="logger">Logger estructurado del consumer.</param>
+public class ConsumidorMatriculaCurso(
+    ContextoBaseDatosAnaliticas baseDatos,
+    ILogger<ConsumidorMatriculaCurso> logger)
     : IConsumer<CourseEnrolledMessage>
 {
+    /// <summary>
+    /// Procesa un mensaje <see cref="CourseEnrolledMessage"/> recibido desde
+    /// RabbitMQ, crea o actualiza el <see cref="MetricaCurso"/> del curso e
+    /// incrementa los contadores de inscripciones (y cursos, si es nuevo) en
+    /// <see cref="EstadisticasPlataforma"/>.
+    /// </summary>
+    /// <param name="context">
+    /// Contexto de consumo de MassTransit que contiene el mensaje.
+    /// </param>
+    /// <returns>Una tarea que representa la operación asíncrona.</returns>
     public async Task Consume(ConsumeContext<CourseEnrolledMessage> context)
     {
-        var msg = context.Message;
-        logger.LogInformation("Processing COURSE_ENROLLED: UserId={UserId} CourseId={CourseId} CourseTitle={CourseTitle}",
-            msg.UserId, msg.CourseId, msg.CourseTitle);
+        var mensaje = context.Message;
+        logger.LogInformation(
+            "Processing COURSE_ENROLLED: UserId={UserId} CourseId={CourseId} " +
+            "CourseTitle={CourseTitle}",
+            mensaje.UserId, mensaje.CourseId, mensaje.CourseTitle);
 
-        if (string.IsNullOrWhiteSpace(msg.CourseId) || !Guid.TryParse(msg.CourseId, out var courseId))
+        if (string.IsNullOrWhiteSpace(mensaje.CourseId)
+            || !Guid.TryParse(mensaje.CourseId, out var idCurso))
         {
-            logger.LogWarning("COURSE_ENROLLED descartado — CourseId inválido o nulo: '{CourseId}'", msg.CourseId);
+            logger.LogWarning(
+                "COURSE_ENROLLED descartado — CourseId inválido o nulo: '{CourseId}'",
+                mensaje.CourseId);
             return;
         }
 
-        // Retry-safe: catch duplicate-key on course_metrics and re-read on conflict.
-        // Multiple concurrent enrollments in the same course can race on the INSERT.
-        // Bug fijo: condición era invertida — retries >= 0 significa "aún hay intentos",
-        //           retries < 0 significa "agotados, usar fallback".
-        int retries = 2;
-        while (retries-- >= 0)
+        // ── Transacción explícita ────────────────────────────────────────────
+        // Envuelve el SaveChangesAsync (EF Core) y los UPDATE de platform_stats
+        // (raw SQL) en la misma transacción PostgreSQL para eliminar el riesgo
+        // de double-count en escenarios de race entre consumers del mismo curso.
+        await using var transaccion = await baseDatos.Database.BeginTransactionAsync();
+
+        // ── course_metrics ────────────────────────────────────────────────────
+        var metrica = await baseDatos.MetricasCurso
+            .FirstOrDefaultAsync(m => m.IdCurso == idCurso);
+        bool esCursoNuevo = metrica == null;
+
+        if (metrica == null)
         {
-            try
+            metrica = new MetricaCurso
             {
-                // Reload stats inside the retry loop so the DbContext is clean after a conflict.
-                db.ChangeTracker.Clear();
-
-                // ── platform_stats ────────────────────────────────────────────────
-                // Usamos UPDATE atómico para evitar lost-update cuando múltiples mensajes
-                // llegan concurrentemente. Si no hay fila todavía, insertamos una.
-                int updated = await db.Database.ExecuteSqlRawAsync(
-                    "UPDATE analytics.platform_stats SET total_enrollments = total_enrollments + 1, updated_at = NOW()");
-                if (updated == 0)
-                {
-                    // Primera vez: insertar fila inicial con este enrollment
-                    db.PlatformStats.Add(new PlatformStats { TotalEnrollments = 1, UpdatedAt = DateTime.UtcNow });
-                }
-
-                // ── course_metrics ────────────────────────────────────────────────
-                var metric = await db.CourseMetrics.FirstOrDefaultAsync(m => m.CourseId == courseId);
-                if (metric == null)
-                {
-                    metric = new CourseMetric { CourseId = courseId, CourseTitle = msg.CourseTitle };
-                    db.CourseMetrics.Add(metric);
-                    // Incremento atómico de TotalCourses para el nuevo curso
-                    await db.Database.ExecuteSqlRawAsync(
-                        "UPDATE analytics.platform_stats SET total_courses = total_courses + 1, updated_at = NOW()");
-                }
-                metric.TotalEnrollments++;
-                metric.UpdatedAt = DateTime.UtcNow;
-
-                await db.SaveChangesAsync();
-                return;   // success
-            }
-            catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("23505") == true
-                                               || ex.InnerException?.Message.Contains("duplicate key") == true)
-            {
-                if (retries >= 0)
-                {
-                    // Aún quedan intentos — reintenta (el while loop recarga el DbContext)
-                    logger.LogWarning("COURSE_ENROLLED — duplicate key en course_metrics para {CourseId}, reintentando... ({Retries} restantes)", courseId, retries);
-                }
-                else
-                {
-                    // Agotados los reintentos: la fila ya existe (la ganó otro consumer concurrente).
-                    // Incrementamos solo el conteo de enrollment; TotalCourses ya fue contado por el ganador.
-                    db.ChangeTracker.Clear();
-                    await db.Database.ExecuteSqlRawAsync(
-                        "UPDATE analytics.platform_stats SET total_enrollments = total_enrollments + 1, updated_at = NOW()");
-                    var metric2 = await db.CourseMetrics.FirstOrDefaultAsync(m => m.CourseId == courseId);
-                    if (metric2 != null)
-                    {
-                        metric2.TotalEnrollments++;
-                        metric2.UpdatedAt = DateTime.UtcNow;
-                        await db.SaveChangesAsync();
-                    }
-                    logger.LogInformation("COURSE_ENROLLED — conflicto resuelto para {CourseId}: enrollment contabilizado", courseId);
-                    return;
-                }
-            }
+                IdCurso    = idCurso,
+                TituloCurso = mensaje.CourseTitle ?? string.Empty
+            };
+            baseDatos.MetricasCurso.Add(metrica);
         }
+
+        metrica.TotalInscripciones++;
+        metrica.ActualizadoEn = DateTime.UtcNow;
+
+        // Si otro consumer ganó la race e insertó el mismo course_id,
+        // SaveChangesAsync lanza DbUpdateException (duplicate key 23505).
+        // La transacción aún no commitó nada → MassTransit reintenta limpio.
+        await baseDatos.SaveChangesAsync();
+
+        // ── platform_stats (raw SQL atómico, dentro de la misma transacción) ─
+        // Se ejecuta DESPUÉS del SaveChanges exitoso para no duplicar contadores.
+        int filasActualizadas = await baseDatos.Database.ExecuteSqlRawAsync(
+            esCursoNuevo
+                ? "UPDATE analytics.platform_stats " +
+                  "SET total_enrollments = total_enrollments + 1, " +
+                  "    total_courses = total_courses + 1, " +
+                  "    updated_at = NOW()"
+                : "UPDATE analytics.platform_stats " +
+                  "SET total_enrollments = total_enrollments + 1, " +
+                  "    updated_at = NOW()");
+
+        if (filasActualizadas == 0)
+        {
+            // Primer evento: todavía no hay fila en platform_stats.
+            // Ocurre si analytics_db fue truncada y este enrollment llega
+            // antes que un USER_REGISTERED.
+            var idNuevasEstadisticas = Guid.NewGuid();
+            await baseDatos.Database.ExecuteSqlRawAsync(
+                "INSERT INTO analytics.platform_stats " +
+                "(id, total_enrollments, total_courses, updated_at) " +
+                "VALUES ({0}, 1, {1}, NOW())",
+                idNuevasEstadisticas, esCursoNuevo ? 1 : 0);
+        }
+
+        await transaccion.CommitAsync();
+        logger.LogInformation(
+            "COURSE_ENROLLED procesado: CourseId={CourseId} NuevoCurso={IsNew}",
+            idCurso, esCursoNuevo);
     }
 }

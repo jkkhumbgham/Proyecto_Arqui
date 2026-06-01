@@ -1,6 +1,5 @@
 package com.puj.ui.service;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.servlet.http.Part;
 
@@ -20,35 +19,58 @@ import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 import java.util.UUID;
 
+/**
+ * Servicio singleton para subir archivos a MinIO usando el protocolo AWS Signature V4.
+ *
+ * <p>Lee la configuración del bucket y las credenciales desde variables de entorno:
+ * {@code MINIO_ENDPOINT}, {@code MINIO_ACCESS_KEY}, {@code MINIO_SECRET_KEY},
+ * {@code MINIO_BUCKET} y {@code MINIO_PUBLIC_URL}. Si no están definidas se
+ * usan los valores predeterminados apuntando a {@code http://minio:9000}.
+ *
+ * <p>Es invocado por {@link LessonContentBean} cuando el instructor adjunta
+ * un archivo a un contenido de lección.
+ *
+ * @author Plataforma PUJ
+ * @since 1.0
+ */
 @ApplicationScoped
 public class MinioUploadService {
 
-    private static final String ENDPOINT   = System.getenv().getOrDefault("MINIO_ENDPOINT",   "http://minio:9000");
-    private static final String ACCESS_KEY = System.getenv().getOrDefault("MINIO_ACCESS_KEY", "puj_minio");
-    private static final String SECRET_KEY = System.getenv().getOrDefault("MINIO_SECRET_KEY", "puj_minio_secret");
-    private static final String BUCKET     = System.getenv().getOrDefault("MINIO_BUCKET",     "course-files");
-    private static final String PUBLIC_URL = System.getenv().getOrDefault("MINIO_PUBLIC_URL", "http://localhost:9000");
+    private static final String ENDPOINT   =
+            System.getenv().getOrDefault("MINIO_ENDPOINT",   "http://minio:9000");
+    private static final String ACCESS_KEY =
+            System.getenv().getOrDefault("MINIO_ACCESS_KEY", "puj_minio");
+    private static final String SECRET_KEY =
+            System.getenv().getOrDefault("MINIO_SECRET_KEY", "puj_minio_secret");
+    private static final String BUCKET     =
+            System.getenv().getOrDefault("MINIO_BUCKET",     "course-files");
+    private static final String PUBLIC_URL =
+            System.getenv().getOrDefault("MINIO_PUBLIC_URL", "http://localhost:9000");
     private static final String REGION     = "us-east-1";
 
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    private boolean available = false;
-
-    @PostConstruct
-    void init() {
-        available = ACCESS_KEY != null && !ACCESS_KEY.isBlank()
-                 && SECRET_KEY != null && !SECRET_KEY.isBlank();
-    }
-
+    /**
+     * Sube un archivo multipart a MinIO y retorna la URL pública del objeto almacenado.
+     *
+     * <p>El nombre del objeto en el bucket se genera aleatoriamente con {@link UUID}
+     * conservando la extensión original del archivo. La petición se firma con
+     * AWS Signature V4 usando PUT.
+     *
+     * @param file parte del formulario multipart que contiene el archivo a subir
+     * @return URL pública del objeto subido (formato {@code PUBLIC_URL/BUCKET/objectName})
+     * @throws Exception si la firma, la conexión o el servidor devuelve error
+     */
     public String upload(Part file) throws Exception {
         String submittedName = file.getSubmittedFileName();
         String originalName  = submittedName != null ? submittedName : "file";
         int    dotIdx        = originalName.lastIndexOf('.');
         String ext           = dotIdx >= 0 ? originalName.substring(dotIdx) : "";
         String objectName    = UUID.randomUUID() + ext;
-        String contentType   = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
+        String contentType   =
+                file.getContentType() != null ? file.getContentType() : "application/octet-stream";
 
         byte[] body;
         try (InputStream is = file.getInputStream()) {
@@ -65,7 +87,7 @@ public class MinioUploadService {
         String path        = "/" + BUCKET + "/" + objectName;
         String bodyHash    = sha256Hex(body);
 
-        // Canonical request (headers must be sorted alphabetically)
+        // Canonical request (encabezados ordenados alfabéticamente)
         String canonicalHeaders = "content-type:" + contentType + "\n"
                 + "host:" + host + "\n"
                 + "x-amz-content-sha256:" + bodyHash + "\n"
@@ -100,32 +122,86 @@ public class MinioUploadService {
 
         HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() != 200) {
-            throw new RuntimeException("MinIO upload failed [" + resp.statusCode() + "]: " + resp.body());
+            throw new RuntimeException(
+                    "MinIO upload failed [" + resp.statusCode() + "]: " + resp.body());
         }
 
         return PUBLIC_URL + "/" + BUCKET + "/" + objectName;
     }
 
-    public boolean isAvailable() { return available; }
-
-    // ── SigV4 helpers ────────────────────────────────────────────────────────
-
-    private static String sha256Hex(byte[] data) throws Exception {
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data));
+    /**
+     * Comprueba si el servicio MinIO está disponible realizando un ping al
+     * endpoint de salud {@code /minio/health/live}.
+     *
+     * @return {@code true} si MinIO responde con HTTP 200 en menos de 3 segundos
+     */
+    public boolean isAvailable() {
+        if (ACCESS_KEY == null || ACCESS_KEY.isBlank()
+                || SECRET_KEY == null || SECRET_KEY.isBlank()) {
+            return false;
+        }
+        try {
+            HttpRequest ping = HttpRequest.newBuilder()
+                    .uri(URI.create(ENDPOINT + "/minio/health/live"))
+                    .GET().timeout(Duration.ofSeconds(3)).build();
+            return http.send(ping, HttpResponse.BodyHandlers.discarding()).statusCode() == 200;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
+    // ── Helpers de firma AWS Signature V4 ────────────────────────────────────
+
+    /**
+     * Calcula el hash SHA-256 de un array de bytes y lo retorna como cadena hexadecimal.
+     *
+     * @param data datos de entrada
+     * @return representación hexadecimal en minúsculas del hash SHA-256
+     * @throws Exception si el algoritmo SHA-256 no está disponible
+     */
+    private static String sha256Hex(byte[] data) throws Exception {
+        return HexFormat.of().formatHex(
+                MessageDigest.getInstance("SHA-256").digest(data));
+    }
+
+    /**
+     * Calcula HMAC-SHA256 sobre {@code data} usando la clave {@code key}.
+     *
+     * @param key  clave secreta en bytes
+     * @param data datos a firmar
+     * @return resultado de HMAC-SHA256 en bytes
+     * @throws Exception si el algoritmo HmacSHA256 no está disponible
+     */
     private static byte[] hmacSha256(byte[] key, String data) throws Exception {
         Mac mac = Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec(key, "HmacSHA256"));
         return mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
     }
 
+    /**
+     * Calcula HMAC-SHA256 y retorna el resultado como cadena hexadecimal.
+     *
+     * @param key  clave secreta en bytes
+     * @param data datos a firmar
+     * @return representación hexadecimal en minúsculas del HMAC-SHA256
+     * @throws Exception si el algoritmo no está disponible
+     */
     private static String hmacHex(byte[] key, String data) throws Exception {
         return HexFormat.of().formatHex(hmacSha256(key, data));
     }
 
-    private static byte[] buildSigningKey(String secret, String date, String region, String service)
-            throws Exception {
+    /**
+     * Deriva la clave de firma AWS Signature V4 encadenando cuatro rondas de HMAC-SHA256.
+     *
+     * @param secret  clave secreta AWS (valor de {@code MINIO_SECRET_KEY})
+     * @param date    fecha en formato {@code yyyyMMdd}
+     * @param region  región AWS (p. ej. {@code us-east-1})
+     * @param service nombre del servicio AWS (p. ej. {@code s3})
+     * @return clave de firma derivada lista para usarse con {@link #hmacHex}
+     * @throws Exception si algún paso de HMAC falla
+     */
+    private static byte[] buildSigningKey(String secret, String date,
+                                          String region, String service) throws Exception {
         byte[] kSecret  = ("AWS4" + secret).getBytes(StandardCharsets.UTF_8);
         byte[] kDate    = hmacSha256(kSecret, date);
         byte[] kRegion  = hmacSha256(kDate, region);

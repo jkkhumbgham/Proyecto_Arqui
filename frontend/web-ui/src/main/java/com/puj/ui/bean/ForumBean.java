@@ -20,7 +20,6 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -67,7 +66,6 @@ public class ForumBean implements Serializable {
     private List<Map<String, Object>> posts   = new ArrayList<>();
 
     private List<CourseOption>  courseOptions   = new ArrayList<>();
-    private Map<String, String> courseTitleToId = new LinkedHashMap<>();
     private Map<String, String> authorNameCache = new HashMap<>();
 
     private String  selectedForumId;
@@ -77,36 +75,64 @@ public class ForumBean implements Serializable {
     private String  newThreadContent;
     private String  newPostContent;
     private String  newForumTitle;
-    private String  courseSearch;
+    private String  selectedCourseId;
 
     @PostConstruct
     public void load() {
         if (!session.isAuthenticated()) return;
         loadForums();
-        if (session.hasRole("INSTRUCTOR", "ADMIN")) {
-            loadCourseOptions();
-        }
+        loadCourseOptions();
     }
 
     private void loadCourseOptions() {
         try {
-            String url = session.hasRole("ADMIN", "DIRECTOR")
-                    ? COURSE_URL + "/api/v1/courses"
-                    : COURSE_URL + "/api/v1/courses/my";
-            HttpResponse<String> resp = http().send(bearer(url), HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() == 200) {
-                JsonNode root = mapper().readTree(resp.body());
-                JsonNode arr  = root.isArray() ? root : root.path("data");
-                arr.forEach(n -> {
-                    String id    = n.path("id").asText();
-                    String title = n.path("title").asText();
-                    if (!id.isBlank() && !title.isBlank()) {
-                        courseOptions.add(new CourseOption(id, title));
-                        courseTitleToId.put(title, id);
-                    }
-                });
+            if (session.hasRole("ADMIN", "DIRECTOR")) {
+                // Admin y Director: todos los cursos publicados
+                HttpResponse<String> resp = http().send(
+                        bearer(COURSE_URL + "/api/v1/courses"),
+                        HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() == 200) {
+                    JsonNode root = mapper().readTree(resp.body());
+                    (root.isArray() ? root : root.path("data")).forEach(n -> addCourseOption(n));
+                }
+            } else if (session.hasRole("INSTRUCTOR")) {
+                // Instructor: solo sus cursos
+                HttpResponse<String> resp = http().send(
+                        bearer(COURSE_URL + "/api/v1/courses/my"),
+                        HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() == 200) {
+                    JsonNode root = mapper().readTree(resp.body());
+                    (root.isArray() ? root : root.path("data")).forEach(n -> addCourseOption(n));
+                }
+            } else if (session.hasRole("STUDENT")) {
+                // Estudiante: cursos en los que está inscrito
+                HttpResponse<String> enrollResp = http().send(
+                        bearer(COURSE_URL + "/api/v1/enrollments/my"),
+                        HttpResponse.BodyHandlers.ofString());
+                if (enrollResp.statusCode() == 200) {
+                    JsonNode arr = mapper().readTree(enrollResp.body());
+                    arr.forEach(e -> {
+                        String courseId = e.path("courseId").asText();
+                        if (!courseId.isBlank()) {
+                            try {
+                                HttpResponse<String> cr = http().send(
+                                        bearer(COURSE_URL + "/api/v1/courses/" + courseId),
+                                        HttpResponse.BodyHandlers.ofString());
+                                if (cr.statusCode() == 200) addCourseOption(mapper().readTree(cr.body()));
+                            } catch (Exception ignored) {}
+                        }
+                    });
+                }
             }
         } catch (Exception ignored) {}
+    }
+
+    private void addCourseOption(JsonNode n) {
+        String id    = n.path("id").asText();
+        String title = n.path("title").asText();
+        if (!id.isBlank() && !title.isBlank()) {
+            courseOptions.add(new CourseOption(id, title));
+        }
     }
 
     private void loadForums() {
@@ -238,19 +264,22 @@ public class ForumBean implements Serializable {
     }
 
     public String createForum() {
-        String resolvedId = courseSearch != null ? courseTitleToId.get(courseSearch.trim()) : null;
-        if (resolvedId == null) {
-            warn("Selecciona un curso válido de la lista de sugerencias.");
+        if (selectedCourseId == null || selectedCourseId.isBlank()) {
+            warn("Selecciona un curso.");
+            return null;
+        }
+        if (newForumTitle == null || newForumTitle.isBlank()) {
+            warn("El título del foro es obligatorio.");
             return null;
         }
         try {
             String body = mapper().writeValueAsString(Map.of(
-                    "title",    newForumTitle != null ? newForumTitle : "",
-                    "courseId", resolvedId));
+                    "title",    newForumTitle.trim(),
+                    "courseId", selectedCourseId));
             HttpResponse<String> resp = http().send(post(COLLAB_URL + "/api/v1/forums", body),
                     HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() == 201) return "forums?faces-redirect=true";
-            warn("No se pudo crear el foro.");
+            warn("No se pudo crear el foro (" + resp.statusCode() + ").");
         } catch (Exception e) {
             warn("Error al crear el foro.");
         }
@@ -341,6 +370,6 @@ public class ForumBean implements Serializable {
     public void    setNewPostContent(String c)             { this.newPostContent = c; }
     public String  getNewForumTitle()                      { return newForumTitle; }
     public void    setNewForumTitle(String t)              { this.newForumTitle = t; }
-    public String  getCourseSearch()                       { return courseSearch; }
-    public void    setCourseSearch(String s)               { this.courseSearch = s; }
+    public String  getSelectedCourseId()                   { return selectedCourseId; }
+    public void    setSelectedCourseId(String id)          { this.selectedCourseId = id; }
 }

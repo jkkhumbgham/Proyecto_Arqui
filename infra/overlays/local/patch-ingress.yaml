@@ -11,11 +11,19 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
     nginx.ingress.kubernetes.io/limit-rpm: "100"
     nginx.ingress.kubernetes.io/limit-connections: "20"
+    nginx.ingress.kubernetes.io/proxy-body-size: "55m"
 spec:
   rules:
     - host: platform.local
       http:
         paths:
+          - path: /course-files/
+            pathType: Prefix
+            backend:
+              service:
+                name: minio
+                port:
+                  number: 9000
           - path: /
             pathType: Prefix
             backend:

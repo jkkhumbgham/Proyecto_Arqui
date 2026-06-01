@@ -46,6 +46,23 @@
 
         <p style="color:#555;margin-bottom:1rem;">#{courseBean.courseDetail.description}</p>
 
+        <!-- CTA: estudiante NO inscrito -->
+        <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')
+                                  and not courseBean.isEnrolled(courseBean.selectedCourseId)
+                                  and courseBean.courseDetail.status == 'PUBLISHED'}">
+            <div class="card" style="margin-bottom:1.5rem;text-align:center;padding:1.5rem;
+                                     border:2px dashed #2563eb;">
+                <p style="color:#555;margin-bottom:1rem;">
+                    Inscríbete para acceder al contenido completo de las lecciones.
+                </p>
+                <h:form>
+                    <h:commandButton value="Inscribirse en este curso"
+                                     action="#{courseBean.enroll}"
+                                     styleClass="btn btn-primary"/>
+                </h:form>
+            </div>
+        </h:panelGroup>
+
         <!-- Student progress bar (only for enrolled students) -->
         <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT') and courseBean.isEnrolled(courseBean.selectedCourseId)}">
             <div class="card" style="margin-bottom:1.5rem;padding:1rem 1.25rem;">
@@ -162,12 +179,30 @@
                                         </h:panelGroup>
                                     </div>
                                     <div style="flex-shrink:0;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-                                        <h:link value="Ver lección"
-                                                outcome="/views/lesson-viewer"
-                                                styleClass="btn btn-secondary btn-sm">
-                                            <f:param name="lessonId" value="#{lesson.id}"/>
-                                            <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
-                                        </h:link>
+                                        <!-- Caso 1: no estudiante, o estudiante inscrito con lección accesible -->
+                                        <h:panelGroup rendered="#{not sessionBean.hasRole('STUDENT')
+                                                                   or (courseBean.isEnrolled(courseBean.selectedCourseId)
+                                                                       and courseBean.isLessonAccessible(lesson.id))}">
+                                            <h:link value="Ver lección"
+                                                    outcome="/views/lesson-viewer"
+                                                    styleClass="btn btn-secondary btn-sm">
+                                                <f:param name="lessonId" value="#{lesson.id}"/>
+                                                <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                            </h:link>
+                                        </h:panelGroup>
+                                        <!-- Caso 2: estudiante inscrito, lección bloqueada -->
+                                        <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')
+                                                                   and courseBean.isEnrolled(courseBean.selectedCourseId)
+                                                                   and not courseBean.isLessonAccessible(lesson.id)}">
+                                            <span title="Completa las lecciones anteriores para desbloquear"
+                                                  style="font-size:.85rem;color:#bbb;cursor:default;">🔒</span>
+                                        </h:panelGroup>
+                                        <!-- Caso 3: estudiante NO inscrito -->
+                                        <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')
+                                                                   and not courseBean.isEnrolled(courseBean.selectedCourseId)}">
+                                            <span title="Inscríbete para acceder"
+                                                  style="font-size:.85rem;color:#bbb;cursor:default;">🔒</span>
+                                        </h:panelGroup>
                                         <!-- Instructor: lesson edit/delete -->
                                         <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
                                             <h:link value="Editar" outcome="/views/lesson-meta-edit"
@@ -201,7 +236,8 @@
                                         </span>
                                     </div>
                                     <div style="display:flex;gap:.4rem;flex-shrink:0;">
-                                        <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')}">
+                                        <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')
+                                                                   and courseBean.isEnrolled(courseBean.selectedCourseId)}">
                                             <h:link value="Tomar evaluación" outcome="/views/assessment-take"
                                                     styleClass="btn btn-primary btn-sm">
                                                 <f:param name="assessmentId" value="#{lesson.assessmentId}"/>
@@ -257,16 +293,63 @@
                                 <div style="font-size:.78rem;color:#888;">Evaluación del curso · Aprobación: #{asmt.passingScorePct}%</div>
                             </div>
                         </div>
-                        <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')}">
-                            <h:link value="Tomar evaluación" outcome="/views/assessment-take"
-                                    styleClass="btn btn-primary btn-sm">
-                                <f:param name="assessmentId" value="#{asmt.id}"/>
-                                <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
-                            </h:link>
-                        </h:panelGroup>
+                        <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;">
+                            <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')
+                                                       and courseBean.isEnrolled(courseBean.selectedCourseId)}">
+                                <h:link value="Tomar evaluación" outcome="/views/assessment-take"
+                                        styleClass="btn btn-primary btn-sm">
+                                    <f:param name="assessmentId" value="#{asmt.id}"/>
+                                    <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                </h:link>
+                            </h:panelGroup>
+                            <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                                <h:link value="Editar" outcome="/views/assessment-edit"
+                                        styleClass="btn btn-secondary btn-sm">
+                                    <f:param name="assessmentId" value="#{asmt.id}"/>
+                                    <f:param name="courseId" value="#{courseBean.selectedCourseId}"/>
+                                </h:link>
+                            </h:panelGroup>
+                            <h:panelGroup rendered="#{sessionBean.hasRole('INSTRUCTOR') or sessionBean.hasRole('ADMIN')}">
+                                <h:form style="display:inline;">
+                                    <h:commandButton value="Eliminar"
+                                                     styleClass="btn btn-secondary btn-sm"
+                                                     style="color:#c0392b;border-color:#e8c4c4;"
+                                                     action="#{editBean.deleteAssessment(asmt.id, courseBean.selectedCourseId)}"
+                                                     onclick="return confirm('¿Eliminar esta evaluación? Esta acción no se puede deshacer.')"/>
+                                </h:form>
+                            </h:panelGroup>
+                        </div>
                     </div>
                 </h:panelGroup>
             </ui:repeat>
+        </h:panelGroup>
+
+        <!-- Finalizar curso: solo para estudiantes inscritos al 100% de lecciones -->
+        <h:panelGroup rendered="#{sessionBean.hasRole('STUDENT')
+                                  and courseBean.isEnrolled(courseBean.selectedCourseId)
+                                  and courseBean.progressPct >= 100}">
+            <div class="card" style="margin-top:1.5rem;text-align:center;padding:1.75rem;">
+                <!-- Todas las evaluaciones aprobadas → puede finalizar -->
+                <h:panelGroup rendered="#{courseBean.courseFinishable}">
+                    <p style="color:#166534;font-weight:600;font-size:1rem;margin-bottom:1.25rem;">
+                        🎉 ¡Has completado todas las lecciones y evaluaciones! Puedes finalizar el curso.
+                    </p>
+                    <h:form>
+                        <h:commandButton value="Finalizar curso ✓"
+                                         action="#{courseBean.finalizeCourse}"
+                                         styleClass="btn btn-primary"
+                                         style="background:#166534;border-color:#166534;padding:.65rem 1.75rem;font-size:1rem;"/>
+                    </h:form>
+                </h:panelGroup>
+                <!-- Faltan evaluaciones con nota suficiente -->
+                <h:panelGroup rendered="#{not courseBean.courseFinishable}">
+                    <p style="color:#b45309;margin:0;font-size:.95rem;">
+                        ⚠️ Has completado todas las lecciones, pero debes aprobar
+                        <strong>todas las evaluaciones con al menos 60%</strong>
+                        para finalizar el curso. Revisa tus evaluaciones pendientes.
+                    </p>
+                </h:panelGroup>
+            </div>
         </h:panelGroup>
 
     </h:panelGroup>

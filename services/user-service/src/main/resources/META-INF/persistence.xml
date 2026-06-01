@@ -8,13 +8,9 @@
     <persistence-unit name="UserServicePU" transaction-type="JTA">
         <jta-data-source>java:jboss/datasources/UserServiceDS</jta-data-source>
 
-        <class>com.puj.users.entity.User</class>
-        <class>com.puj.users.entity.RefreshToken</class>
-        <class>com.puj.users.entity.AuditLog</class>
-        <class>com.puj.users.entity.UserPoints</class>
-        <class>com.puj.users.entity.PointEvent</class>
-        <class>com.puj.users.entity.UserBadge</class>
-        <class>com.puj.users.entity.GamificationRule</class>
+        <class>com.puj.usuarios.autenticacion.dominio.Usuario</class>
+        <class>com.puj.usuarios.autenticacion.dominio.TokenRefresh</class>
+        <class>com.puj.usuarios.autenticacion.dominio.RegistroAuditoria</class>
 
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
 

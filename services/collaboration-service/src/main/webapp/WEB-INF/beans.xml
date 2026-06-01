@@ -2,6 +2,7 @@
 <beans xmlns="https://jakarta.ee/xml/ns/jakartaee"
        bean-discovery-mode="annotated" version="4.0">
     <interceptors>
-        <class>com.puj.security.rbac.RbacInterceptor</class>
+        <class>com.puj.seguridad.rbac.InterceptorRbac</class>
+        <class>com.puj.colaboracion.aspectos.registro.InterceptorRegistro</class>
     </interceptors>
 </beans>

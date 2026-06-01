@@ -105,8 +105,8 @@ kubectl apply -k "$ROOT/infra/overlays/local/"
 
 # ── 6. Esperar a que los pods arranquen ───────────────────────────────────────
 echo ""
-echo "Esperando pods de infraestructura (postgres, redis, rabbitmq, mailhog)..."
-for infra in postgres redis rabbitmq mailhog; do
+echo "Esperando pods de infraestructura (postgres, redis, rabbitmq, mailhog, minio)..."
+for infra in postgres redis rabbitmq mailhog minio; do
   kubectl rollout status deployment/$infra -n puj-platform --timeout=180s || \
     echo "  ⚠ $infra tardó más de 3 min — continúa en background"
 done
@@ -214,16 +214,9 @@ wait_http 8083 "/api/v1/health" "assessment-service"
 wait_http 8084 "/api/v1/health" "collaboration-service"
 wait_http 8085 "/health"        "analytics-service (MassTransit)"
 
-# Solo correr el seed si la base no tiene datos aún (evita doble-seed si el script
-# se corre sin haber borrado el namespace primero).
-COURSE_COUNT=$(kubectl exec -n puj-platform deploy/postgres -c postgres -- \
-  psql -U puj_admin -d learning_platform -tAc \
-  "SELECT COUNT(*) FROM courses.courses;" 2>/dev/null | tr -d '[:space:]' || echo "0")
-if [ "${COURSE_COUNT:-0}" -gt 0 ]; then
-  echo "  ⚠ La BD ya tiene ${COURSE_COUNT} curso(s) — seed omitido (borra el namespace primero para re-seedar)"
-else
-  bash "$ROOT/scripts/seed-data.sh" --k8s || echo "  ⚠ Seed falló — continúa"
-fi
+# El seed es idempotente: limpia cursos/evaluaciones/colaboración al inicio
+# y recrea todo desde cero. Los usuarios se reutilizan si ya existen.
+bash "$ROOT/scripts/seed-data.sh" --k8s || echo "  ⚠ Seed falló — continúa"
 
 # Cerrar port-forwards del seed
 kill $PF1 $PF2 $PF3 $PF4 $PF5 2>/dev/null || true
@@ -249,6 +242,10 @@ echo ""
 echo "  MailHog (correos capturados) — en otra terminal:"
 echo "    kubectl port-forward svc/mailhog 8025:8025 -n puj-platform"
 echo "    → http://localhost:8025"
+echo ""
+echo "  MinIO Console (archivos subidos) — en otra terminal:"
+echo "    kubectl port-forward svc/minio 9001:9001 -n puj-platform"
+echo "    → http://localhost:9001  (puj_minio / puj_minio_secret)"
 echo ""
 echo "  RabbitMQ management — en otra terminal:"
 echo "    kubectl port-forward svc/rabbitmq 15672:15672 -n puj-platform"

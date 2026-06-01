@@ -24,14 +24,19 @@ spec:
             - 512mb
             - --maxmemory-policy
             - allkeys-lru
-            - --save
-            - ""          # sin persistencia en K8s — usar ElastiCache en producción
+            - --appendonly
+            - "yes"
+            - --appendfilename
+            - "appendonly.aof"
           env:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: platform-secrets
                   key: REDIS_PASSWORD
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
           ports:
             - containerPort: 6379
           readinessProbe:
@@ -46,6 +51,10 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "300m"
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-pvc
 ---
 apiVersion: v1
 kind: Service
