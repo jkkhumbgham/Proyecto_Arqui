@@ -18,6 +18,7 @@ import org.mockito.Mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.argThat;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.puj.eventos.publicador.PublicadorEventos;
@@ -155,6 +156,56 @@ class ServicioAutenticacionTest {
 
         verify(servicioListaNegra).agregarAListaNegra("jti-123", 500L);
         verify(repositorioTokens).revocarTodosDelUsuario(usuarioEjemplo.getId());
+    }
+
+    // ── TU-006: Logout revoca todos los tokens del usuario ──────────────────
+    @Test
+    void cerrarSesion_revocaTodosLosTokensDelUsuario() {
+        ReclamosJwt reclamos = new ReclamosJwt("jti-logout", usuarioEjemplo.getId().toString(),
+                "test@puj.edu.co", "STUDENT", Instant.now(),
+                Instant.now().plusSeconds(900));
+        when(proveedorJwt.obtenerTtlRestanteSegundos("jti-logout")).thenReturn(800L);
+
+        servicioAutenticacion.cerrarSesion(reclamos, "192.168.1.1");
+
+        // El JTI debe quedar en lista negra con el TTL restante exacto
+        verify(servicioListaNegra).agregarAListaNegra("jti-logout", 800L);
+        // Todos los refresh tokens del usuario deben revocarse
+        verify(repositorioTokens).revocarTodosDelUsuario(usuarioEjemplo.getId());
+    }
+
+    // ── TU adicional: registrar asigna hash BCrypt, no contraseña en plano ──
+    @Test
+    void registrar_exitoso_hashContrasenaNoEsTextoPlano() {
+        when(repositorioUsuarios.existePorCorreo(anyString())).thenReturn(false);
+        when(repositorioUsuarios.guardar(any(Usuario.class))).thenAnswer(inv -> {
+            Usuario u = inv.getArgument(0);
+            if (u.getId() == null) establecerCampo(u, "id", UUID.randomUUID());
+            return u;
+        });
+
+        SolicitudRegistro solicitud = new SolicitudRegistro(
+                "hash@puj.edu.co", "secreto123", "Carlos", "Ruiz", true);
+
+        RespuestaUsuario respuesta = servicioAutenticacion.registrar(solicitud);
+
+        assertThat(respuesta.email()).isEqualTo("hash@puj.edu.co");
+        // La respuesta no expone el hash; verificamos que el usuario guardado
+        // tiene un hash BCrypt válido (no el texto en plano)
+        verify(repositorioUsuarios).guardar(argThat(u ->
+                u.obtenerHashContrasena() != null
+                && !u.obtenerHashContrasena().equals("secreto123")
+                && u.obtenerHashContrasena().startsWith("$2")));
+    }
+
+    // ── TU adicional: login con cuenta inexistente lanza NotAuthorized ───────
+    @Test
+    void iniciarSesion_usuarioInexistente_lanzaExcepcion() {
+        when(repositorioUsuarios.buscarPorCorreo(anyString())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> servicioAutenticacion.iniciarSesion(
+                new SolicitudLogin("noexiste@puj.edu.co", "clave"), "10.0.0.1"))
+                .isInstanceOf(NotAuthorizedException.class);
     }
 
     private void establecerCampo(Object destino, String nombre, Object valor) {

@@ -92,4 +92,52 @@ class CursoTest {
 
         assertEquals(idInstructor, curso.obtenerIdInstructor());
     }
+
+    // ── TU-011: borrado lógico registra timestamp de eliminación ─────────────
+    @Test
+    void eliminarLogicamente_registraEliminadoEnConTimestamp() {
+        Curso curso = new Curso();
+        curso.establecerTitulo("Curso con Timestamp");
+        curso.establecerIdInstructor(UUID.randomUUID());
+
+        assertNull(curso.obtenerEliminadoEn(),
+                "eliminadoEn debe ser null antes del borrado lógico");
+
+        curso.eliminarLogicamente();
+
+        assertTrue(curso.estaEliminado());
+        assertNotNull(curso.obtenerEliminadoEn(),
+                "eliminadoEn debe tener timestamp tras el borrado lógico");
+    }
+
+    // ── TU-012: transición completa de estados DRAFT → PUBLISHED → ARCHIVED ─
+    @Test
+    void establecerEstado_transicionCompletaDraftPublishedArchived() {
+        Curso curso = new Curso();
+        curso.establecerTitulo("Curso de Arquitectura de Software");
+        curso.establecerIdInstructor(UUID.randomUUID());
+
+        // Estado inicial debe ser DRAFT
+        assertEquals(EstadoCurso.DRAFT, curso.obtenerEstado(),
+                "Estado inicial debe ser DRAFT");
+
+        // DRAFT → PUBLISHED
+        curso.establecerEstado(EstadoCurso.PUBLISHED);
+        assertEquals(EstadoCurso.PUBLISHED, curso.obtenerEstado());
+
+        // PUBLISHED → ARCHIVED
+        curso.establecerEstado(EstadoCurso.ARCHIVED);
+        assertEquals(EstadoCurso.ARCHIVED, curso.obtenerEstado());
+    }
+
+    // ── TU adicional: maxEstudiantes se asigna y recupera correctamente ──────
+    @Test
+    void maxEstudiantesSeAsignaCorrectamente() {
+        Curso curso = new Curso();
+        curso.establecerTitulo("Curso con límite");
+        curso.establecerIdInstructor(UUID.randomUUID());
+        curso.establecerMaxEstudiantes(30);
+
+        assertEquals(30, curso.obtenerMaxEstudiantes());
+    }
 }

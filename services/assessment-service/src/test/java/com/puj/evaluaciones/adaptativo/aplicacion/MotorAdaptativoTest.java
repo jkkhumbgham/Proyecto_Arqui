@@ -136,6 +136,60 @@ class MotorAdaptativoTest {
     }
 
     /**
+     * TU-010: Verifica que una regla inactiva no genera recomendación,
+     * aunque el puntaje esté por debajo del umbral.
+     */
+    @Test
+    void evaluar_reglaInactiva_retornaVacio() {
+        regla.setActiva(false);
+        when(repoReglas.buscarPorEvaluacion(idEvaluacion)).thenReturn(Optional.of(regla));
+
+        Optional<RecomendacionAdaptativa> resultado = motor.evaluar(
+                idEvaluacion, idUsuario,
+                BigDecimal.valueOf(1), BigDecimal.valueOf(10)
+        );
+
+        assertThat(resultado).isEmpty();
+    }
+
+    /**
+     * Verifica que el porcentaje se calcula correctamente cuando el puntaje
+     * es exactamente igual al umbral (caso límite: no debe recomendar).
+     */
+    @Test
+    void evaluar_puntajeExactoAlUmbral_retornaVacio() {
+        when(repoReglas.buscarPorEvaluacion(idEvaluacion)).thenReturn(Optional.of(regla));
+
+        // 6/10 = 60% — igual al umbral, no debe recomendar
+        Optional<RecomendacionAdaptativa> resultado = motor.evaluar(
+                idEvaluacion, idUsuario,
+                BigDecimal.valueOf(6), BigDecimal.valueOf(10)
+        );
+
+        assertThat(resultado).isEmpty();
+    }
+
+    /**
+     * Verifica que la recomendación contiene el mensaje y la lección
+     * suplementaria configurados en la regla.
+     */
+    @Test
+    void evaluar_puntajeBajo_recomendacionContieneIdLeccionYMensaje() {
+        when(repoReglas.buscarPorEvaluacion(idEvaluacion)).thenReturn(Optional.of(regla));
+
+        Optional<RecomendacionAdaptativa> resultado = motor.evaluar(
+                idEvaluacion, idUsuario,
+                BigDecimal.valueOf(2), BigDecimal.valueOf(10)
+        );
+
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().idLeccionSupplementaria())
+                .isEqualTo(regla.getIdLeccionSupplementaria());
+        assertThat(resultado.get().mensaje())
+                .isEqualTo("Repasa el material antes de continuar.");
+    }
+
+    /**
      * Establece un campo privado por reflexión para configurar el estado del
      * objeto bajo prueba.
      *
