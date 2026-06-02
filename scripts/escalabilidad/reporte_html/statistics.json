@@ -1,0 +1,50 @@
+{
+  "S1-Login API" : {
+    "transaction" : "S1-Login API",
+    "sampleCount" : 1000,
+    "errorCount" : 1000,
+    "errorPct" : 100.0,
+    "meanResTime" : 0.45200000000000035,
+    "medianResTime" : 0.0,
+    "minResTime" : 0.0,
+    "maxResTime" : 24.0,
+    "pct1ResTime" : 1.0,
+    "pct2ResTime" : 1.0,
+    "pct3ResTime" : 1.0,
+    "throughput" : 102.7221366204417,
+    "receivedKBytesPerSec" : 263.9276771956857,
+    "sentKBytesPerSec" : 0.0
+  },
+  "S2-Catálogo Cursos API" : {
+    "transaction" : "S2-Catálogo Cursos API",
+    "sampleCount" : 1000,
+    "errorCount" : 1000,
+    "errorPct" : 100.0,
+    "meanResTime" : 0.3879999999999997,
+    "medianResTime" : 0.0,
+    "minResTime" : 0.0,
+    "maxResTime" : 2.0,
+    "pct1ResTime" : 1.0,
+    "pct2ResTime" : 1.0,
+    "pct3ResTime" : 1.0,
+    "throughput" : 103.00782859497322,
+    "receivedKBytesPerSec" : 264.6617158529048,
+    "sentKBytesPerSec" : 0.0
+  },
+  "Total" : {
+    "transaction" : "Total",
+    "sampleCount" : 2000,
+    "errorCount" : 2000,
+    "errorPct" : 100.0,
+    "meanResTime" : 0.4200000000000007,
+    "medianResTime" : 0.0,
+    "minResTime" : 0.0,
+    "maxResTime" : 24.0,
+    "pct1ResTime" : 1.0,
+    "pct2ResTime" : 1.0,
+    "pct3ResTime" : 1.0,
+    "throughput" : 205.4442732408834,
+    "receivedKBytesPerSec" : 527.8553543913714,
+    "sentKBytesPerSec" : 0.0
+  }
+}
